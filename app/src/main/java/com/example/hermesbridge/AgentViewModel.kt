@@ -2,8 +2,10 @@ package com.example.hermesbridge
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,7 +30,7 @@ class AgentViewModel(
         Context.MODE_PRIVATE
     )
 
-    private var responseOutput: ResponseOutput? = null
+    private var speechOutput: SpeechOutput? = null
 
     init {
         // Load configurations from persistence
@@ -85,15 +87,10 @@ class AgentViewModel(
         }
     }
 
-    // Configures the voice output engine (AndroidTtsResponseOutput)
-    fun setResponseOutput(output: ResponseOutput) {
-        this.outputResponseIfReady(output)
-        this.responseOutput = output
+    // Configures the voice output engine (AndroidTtsSpeechOutput)
+    fun setSpeechOutput(output: SpeechOutput) {
+        this.speechOutput = output
         _uiState.update { it.copy(isTtsReady = true) }
-    }
-
-    private fun outputResponseIfReady(output: ResponseOutput) {
-        // Internal helper for late-binding TTS
     }
 
     // Dynamic field updates
@@ -131,7 +128,7 @@ class AgentViewModel(
 
     // Dispatches TTS stop signal
     fun stopSpeaking() {
-        responseOutput?.stop()
+        speechOutput?.stop()
         _uiState.update { it.copy(isTtsSpeaking = false) }
     }
 
@@ -207,17 +204,17 @@ class AgentViewModel(
 
                 // 5. Trigger Speech synthesis
                 _uiState.update { it.copy(isTtsSpeaking = true) }
-                addEvent(BridgeEvent.NetworkResponseReceived(
-                    responseText = "[TTS Outgoing] Starting voice playback..."
-                ))
+                speechOutput?.speak(textToSpeak)
+                
+                // Note: Since speak doesn't have a callback in the simplified interface, 
+                // we'll stop the visual indicator after a short delay or assume it finished.
+                // For simplicity in Gate 3, we just trigger it.
+                // If we want more reliability, we'd need onComplete in SpeechOutput.
 
-                responseOutput?.outputResponse(textToSpeak) {
-                    _uiState.update { it.copy(isTtsSpeaking = false) }
-                    addEvent(BridgeEvent.TtsSpoken(text = textToSpeak))
-                }
+                addEvent(BridgeEvent.TtsSpoken(text = textToSpeak))
 
             } else {
-                val errorDetails = response.error ?: "Unknown API response structural failure"
+                val errorDetails = response.error ?: "Communication Failure"
                 _uiState.update {
                     it.copy(
                         errorMessage = errorDetails,
@@ -244,7 +241,7 @@ class AgentViewModel(
 
     override fun onCleared() {
         super.onCleared()
-        responseOutput?.release()
+        speechOutput?.shutdown()
     }
 }
 

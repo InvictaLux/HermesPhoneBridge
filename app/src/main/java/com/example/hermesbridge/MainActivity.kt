@@ -8,11 +8,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
+import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: AgentViewModel
-    private var ttsOutput: AndroidTtsResponseOutput? = null
+    private var speechOutput: AndroidTtsSpeechOutput? = null
 
     private val batteryReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
@@ -49,10 +50,10 @@ class MainActivity : ComponentActivity() {
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
 
         // 3. Initialize Android's standard TTS response output player on the UI thread
-        ttsOutput = AndroidTtsResponseOutput(this) { success ->
+        speechOutput = AndroidTtsSpeechOutput(this) { success ->
             if (success) {
-                Log.d("MainActivity", "TextToSpeech successfully initialized and connected to layout pipeline")
-                ttsOutput?.let { viewModel.setResponseOutput(it) }
+                Log.d("MainActivity", "TextToSpeech successfully initialized")
+                speechOutput?.let { viewModel.setSpeechOutput(it) }
             } else {
                 Log.e("MainActivity", "TextToSpeech initialization failed")
             }
@@ -86,6 +87,6 @@ class MainActivity : ComponentActivity() {
             // Already unregistered or wasn't registered
         }
         // Release hardware synthesis bindings
-        ttsOutput?.release()
+        speechOutput?.shutdown()
     }
 }
