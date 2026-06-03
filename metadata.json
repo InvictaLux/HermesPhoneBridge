@@ -1,0 +1,6 @@
+{
+  "name": "Hermes Phone Bridge",
+  "description": "Android Jetpack Compose phone test bridge for the Hermes backend that sends text posts and speaks responses using TTS.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
