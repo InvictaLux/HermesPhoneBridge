@@ -31,6 +31,10 @@ android {
         buildConfigField("String", "AGENT_ENDPOINT", "\"${secretsProperties.getProperty("AGENT_ENDPOINT", "ask")}\"")
         buildConfigField("String", "DEVICE_ID", "\"${secretsProperties.getProperty("DEVICE_ID", "pixel10a-dev-001")}\"")
         buildConfigField("String", "API_KEY", "\"${secretsProperties.getProperty("API_KEY", "")}\"")
+
+        manifestPlaceholders["metaApplicationId"] = secretsProperties.getProperty("META_APPLICATION_ID", "0")
+        manifestPlaceholders["metaClientToken"] = secretsProperties.getProperty("META_CLIENT_TOKEN", "0")
+        manifestPlaceholders["metaCallbackScheme"] = "hermesbridge"
     }
 
     buildTypes {

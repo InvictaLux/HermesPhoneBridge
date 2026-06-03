@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.hermesbridge">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -11,7 +18,19 @@
         android:roundIcon="@android:drawable/sym_def_app_icon"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.NoActionBar">
-        
+
+        <meta-data
+            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+            android:value="${metaApplicationId}" />
+
+        <meta-data
+            android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+            android:value="${metaClientToken}" />
+
+        <meta-data
+            android:name="com.meta.wearable.mwdat.DAM_ENABLED"
+            android:value="true" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -20,6 +39,14 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Callback intent filter for Meta DAT authentication / registration -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="${metaCallbackScheme}" />
             </intent-filter>
         </activity>
     </application>
