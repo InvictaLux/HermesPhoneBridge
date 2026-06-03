@@ -6,3 +6,6 @@ coverage/
 *.log
 .env*
 !.env.example
+app/secrets.properties
+secrets.properties
+pooliq-key.jks

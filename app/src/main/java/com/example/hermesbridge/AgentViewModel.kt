@@ -87,8 +87,13 @@ class AgentViewModel(
 
     // Configures the voice output engine (AndroidTtsResponseOutput)
     fun setResponseOutput(output: ResponseOutput) {
+        this.outputResponseIfReady(output)
         this.responseOutput = output
         _uiState.update { it.copy(isTtsReady = true) }
+    }
+
+    private fun outputResponseIfReady(output: ResponseOutput) {
+        // Internal helper for late-binding TTS
     }
 
     // Dynamic field updates
@@ -176,8 +181,8 @@ class AgentViewModel(
 
             _uiState.update { it.copy(isLoading = false) }
 
-            if (response.ok && response.responseText != null) {
-                val textToSpeak = response.responseText
+            if (response.error == null) {
+                val textToSpeak = response.finalResponseText
 
                 _uiState.update {
                     it.copy(
@@ -256,4 +261,3 @@ class AgentViewModelFactory(
         throw IllegalArgumentException("Unknown ViewModel class")
     }
 }
-

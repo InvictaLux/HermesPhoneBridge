@@ -1,3 +1,13 @@
+import java.util.Properties
+import java.io.FileInputStream
+
+val secretsFile = rootProject.file("secrets.properties")
+val secretsProperties = Properties().apply {
+    if (secretsFile.exists()) {
+        load(FileInputStream(secretsFile))
+    }
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -16,6 +26,11 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        
+        buildConfigField("String", "API_BASE_URL", "\"${secretsProperties.getProperty("API_BASE_URL", "https://agent.pitythepool.com/")}\"")
+        buildConfigField("String", "AGENT_ENDPOINT", "\"${secretsProperties.getProperty("AGENT_ENDPOINT", "ask")}\"")
+        buildConfigField("String", "DEVICE_ID", "\"${secretsProperties.getProperty("DEVICE_ID", "pixel10a-dev-001")}\"")
+        buildConfigField("String", "API_KEY", "\"${secretsProperties.getProperty("API_KEY", "")}\"")
     }
 
     buildTypes {
@@ -39,6 +54,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -21,8 +21,18 @@ data class AgentRequest(
 )
 
 data class AgentResponse(
-    val ok: Boolean,
-    @SerializedName("response_text") val responseText: String?,
-    @SerializedName("session_id") val sessionId: String?,
-    val error: String?
-)
+    @SerializedName("response")
+    val response: String? = null,
+
+    @SerializedName("response_text")
+    val responseText: String? = null,
+
+    @SerializedName("session_id")
+    val sessionId: String? = null,
+
+    @SerializedName("error")
+    val error: String? = null
+) {
+    val finalResponseText: String
+        get() = response ?: responseText ?: error ?: "No response text returned."
+}
