@@ -11,6 +11,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -76,6 +77,21 @@ fun AgentScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(text = error)
+                }
+            }
+        }
+
+        // Display recent events for debugging/visibility
+        state.events.forEach { event ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(8.dp)) {
+                    Text(
+                        text = event.message,
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }

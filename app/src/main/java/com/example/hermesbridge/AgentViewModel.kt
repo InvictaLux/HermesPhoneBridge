@@ -2,9 +2,11 @@ package com.example.hermesbridge
 
 import android.app.Application
 import android.content.Context
-import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hermesbridge.bridge.BridgeEvent as InputBridgeEvent
+import com.example.hermesbridge.bridge.InputSource
+import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -67,22 +69,21 @@ class AgentViewModel(
                 apiUrl = savedApiUrl,
                 deviceId = savedDeviceId,
                 sessionId = savedSessionId,
-                inputSourceName = inputSource.name,
-                inputSourceType = inputSource.type
+                inputSourceName = if (inputSource is PhoneTextInputSource) "On-Screen Keyboard" else "External Source",
+                inputSourceType = if (inputSource is PhoneTextInputSource) "phone_text" else "unknown"
             )
         }
 
         // Connect the InputSource text emissions to the transmission pipeline
-        viewModelScope.launch {
-            inputSource.textInputs.collect { text ->
-                sendTextToBackend(text)
-            }
+        inputSource.setListener { event ->
+            sendTextToBackend(event.text, event.source)
         }
+        inputSource.start()
 
         // If a new session ID was dynamically generated on startup, send initialized event to the backend
         if (isNewSession) {
             viewModelScope.launch {
-                sendTextToBackend("New Session Initialized")
+                sendTextToBackend("New Session Initialized", "system")
             }
         }
     }
@@ -121,8 +122,8 @@ class AgentViewModel(
         // Clear input text field straight away
         _uiState.update { it.copy(inputText = "") }
 
-        viewModelScope.launch {
-            inputSource.sendInput(textToSubmit)
+        if (inputSource is PhoneTextInputSource) {
+            inputSource.submitText(textToSubmit)
         }
     }
 
@@ -147,18 +148,18 @@ class AgentViewModel(
     }
 
     // Pipeline: Receives input, constructs API POST, handles feedback
-    private fun sendTextToBackend(rawText: String) {
+    private fun sendTextToBackend(rawText: String, source: String) {
         viewModelScope.launch {
             val currentState = _uiState.value
             val timestampIso = getIsoTimestamp()
 
             // 1. Post local input event
-            val inputEvent = BridgeEvent.TextInput(text = rawText)
+            val inputEvent = LogEvent.TextInput(text = rawText)
             addEvent(inputEvent)
 
             // 2. Mark loading and post sent message
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            addEvent(BridgeEvent.NetworkRequestSent(url = currentState.apiUrl))
+            addEvent(LogEvent.NetworkRequestSent(url = currentState.apiUrl))
 
             // 3. Assemble JSON Payload strictly adhering to the schema request
             val requestPayload = AgentRequest(
@@ -168,8 +169,8 @@ class AgentViewModel(
                 text = rawText,
                 timestamp = timestampIso,
                 metadata = AgentMetadata(
-                    source = inputSource.type,
-                    wearable = if (inputSource.type == "wearable_meta") "meta_glasses" else "none"
+                    source = source,
+                    wearable = if (source == "wearable_meta") "meta_glasses" else "none"
                 )
             )
 
@@ -190,14 +191,14 @@ class AgentViewModel(
                 }
 
                 // Log response receipt
-                addEvent(BridgeEvent.NetworkResponseReceived(responseText = textToSpeak))
+                addEvent(LogEvent.NetworkResponseReceived(responseText = textToSpeak))
 
                 // Robustly capture backend session ID rotation/sync and save to SharedPreferences
                 val responseSessionId = response.sessionId
                 if (!responseSessionId.isNullOrEmpty() && responseSessionId != _uiState.value.sessionId) {
                     _uiState.update { it.copy(sessionId = responseSessionId) }
                     sharedPrefs.edit().putString(AppConfig.KEY_SESSION_ID, responseSessionId).apply()
-                    addEvent(BridgeEvent.NetworkResponseReceived(
+                    addEvent(LogEvent.NetworkResponseReceived(
                         responseText = "[Session Sync] Updated local Session ID to: $responseSessionId"
                     ))
                 }
@@ -206,12 +207,7 @@ class AgentViewModel(
                 _uiState.update { it.copy(isTtsSpeaking = true) }
                 speechOutput?.speak(textToSpeak)
                 
-                // Note: Since speak doesn't have a callback in the simplified interface, 
-                // we'll stop the visual indicator after a short delay or assume it finished.
-                // For simplicity in Gate 3, we just trigger it.
-                // If we want more reliability, we'd need onComplete in SpeechOutput.
-
-                addEvent(BridgeEvent.TtsSpoken(text = textToSpeak))
+                addEvent(LogEvent.TtsSpoken(text = textToSpeak))
 
             } else {
                 val errorDetails = response.error ?: "Communication Failure"
@@ -222,12 +218,12 @@ class AgentViewModel(
                         isBackendConnected = false
                     )
                 }
-                addEvent(BridgeEvent.ErrorOccurred(error = errorDetails))
+                addEvent(LogEvent.ErrorOccurred(error = errorDetails))
             }
         }
     }
 
-    private fun addEvent(event: BridgeEvent) {
+    private fun addEvent(event: LogEvent) {
         _uiState.update {
             it.copy(events = listOf(event) + it.events) // Prepend for live logging stream
         }
@@ -241,6 +237,7 @@ class AgentViewModel(
 
     override fun onCleared() {
         super.onCleared()
+        inputSource.stop()
         speechOutput?.shutdown()
     }
 }

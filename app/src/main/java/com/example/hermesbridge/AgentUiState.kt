@@ -9,7 +9,7 @@ data class AgentUiState(
     val latestResponse: String = "",
     val isTtsReady: Boolean = false,
     val isTtsSpeaking: Boolean = false,
-    val events: List<BridgeEvent> = emptyList(),
+    val events: List<LogEvent> = emptyList(),
     val errorMessage: String? = null,
     val inputSourceName: String = "On-Screen Keyboard",
     val inputSourceType: String = "phone_text",
