@@ -4,13 +4,15 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.hermesbridge.bridge.BridgeEvent as InputBridgeEvent
 import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.speech.SpeechOutput
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -18,6 +20,10 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+
+sealed class UiCommand {
+    object LaunchMetaDatRegistration : UiCommand()
+}
 
 class AgentViewModel(
     application: Application,
@@ -27,6 +33,9 @@ class AgentViewModel(
 
     private val _uiState = MutableStateFlow(AgentUiState())
     val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()
+
+    private val _commands = MutableSharedFlow<UiCommand>()
+    val commands: SharedFlow<UiCommand> = _commands.asSharedFlow()
 
     private val sharedPrefs = application.getSharedPreferences(
         AppConfig.PREFS_NAME,
@@ -98,6 +107,12 @@ class AgentViewModel(
     // Dynamic field updates
     fun updateMetaDatStatus(newStatus: MetaDatStatus) {
         _uiState.update { it.copy(metaDatStatus = newStatus) }
+    }
+
+    fun onRegisterMetaDatClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.LaunchMetaDatRegistration)
+        }
     }
 
     fun onInputTextChanged(newText: String) {

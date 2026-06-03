@@ -74,6 +74,18 @@ class MainActivity : ComponentActivity() {
                 viewModel.updateMetaDatStatus(status)
             }
         }
+        
+        // Command listener for UI actions
+        lifecycleScope.launch {
+            viewModel.commands.collect { command ->
+                when (command) {
+                    is UiCommand.LaunchMetaDatRegistration -> {
+                        metaDatManager.startRegistration(this@MainActivity)
+                    }
+                }
+            }
+        }
+
         metaDatManager.initialize()
 
         // Register battery status receiver

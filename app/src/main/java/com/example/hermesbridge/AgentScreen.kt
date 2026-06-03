@@ -21,6 +21,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.example.hermesbridge.meta.MetaDatStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -52,6 +53,15 @@ fun AgentScreen(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.primary
         )
+
+        if (state.metaDatStatus is MetaDatStatus.RegistrationRequired) {
+            Button(
+                onClick = { viewModel.onRegisterMetaDatClicked() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Register Meta DAT")
+            }
+        }
 
         OutlinedTextField(
             value = state.inputText,

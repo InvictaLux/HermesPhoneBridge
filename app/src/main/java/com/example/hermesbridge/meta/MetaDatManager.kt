@@ -1,5 +1,6 @@
 package com.example.hermesbridge.meta
 
+import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.meta.wearable.dat.core.Wearables
@@ -45,6 +46,16 @@ class MetaDatManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e("HermesBridge", "Failed to initialize Meta DAT SDK", e)
             _status.value = MetaDatStatus.Error(e.message ?: "Unknown error")
+        }
+    }
+
+    fun startRegistration(activity: Activity) {
+        try {
+            Log.d("HermesBridge", "Launching Meta DAT Registration...")
+            Wearables.startRegistration(activity)
+        } catch (e: Exception) {
+            Log.e("HermesBridge", "Failed to launch registration", e)
+            _status.value = MetaDatStatus.Error("Launch failed: ${e.message}")
         }
     }
 }
