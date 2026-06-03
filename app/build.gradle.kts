@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.hermesbridge"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -70,4 +70,5 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.okhttp)
     implementation(libs.gson)
+    implementation(libs.meta.wearables.dat.core)
 }

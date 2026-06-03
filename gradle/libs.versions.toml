@@ -10,6 +10,7 @@ kotlin = "2.0.21"
 composeBom = "2024.12.01"
 okhttp = "4.12.0"
 gson = "2.11.0"
+meta-wearables-dat = "0.7.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,6 +30,7 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
+meta-wearables-dat-core = { group = "com.meta.wearable", name = "mwdat-core", version.ref = "meta-wearables-dat" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
