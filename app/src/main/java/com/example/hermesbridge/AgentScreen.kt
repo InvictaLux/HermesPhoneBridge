@@ -47,6 +47,12 @@ fun AgentScreen(
             style = MaterialTheme.typography.bodyMedium
         )
 
+        Text(
+            text = "Meta DAT: ${state.metaDatStatus}",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+
         OutlinedTextField(
             value = state.inputText,
             onValueChange = { viewModel.onInputTextChanged(it) },

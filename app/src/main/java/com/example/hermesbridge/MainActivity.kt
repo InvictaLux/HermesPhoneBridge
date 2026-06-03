@@ -8,13 +8,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import com.example.hermesbridge.bridge.PhoneTextInputSource
+import com.example.hermesbridge.meta.MetaDatManager
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var viewModel: AgentViewModel
     private var speechOutput: AndroidTtsSpeechOutput? = null
+    private lateinit var metaDatManager: MetaDatManager
 
     private val batteryReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
@@ -62,10 +66,20 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // 4. Meta DAT Initialization Status Only (Gate 7C)
+        metaDatManager = MetaDatManager(this)
+        lifecycleScope.launch {
+            metaDatManager.status.collect { status ->
+                Log.d("HermesBridge", "Meta DAT Status: $status")
+                viewModel.updateMetaDatStatus(status)
+            }
+        }
+        metaDatManager.initialize()
+
         // Register battery status receiver
         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
 
-        // 4. Inject layouts and Compose Theme
+        // 5. Inject layouts and Compose Theme
         setContent {
             MaterialTheme {
                 AgentScreen(

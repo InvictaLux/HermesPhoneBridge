@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.hermesbridge.bridge.BridgeEvent as InputBridgeEvent
 import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
+import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -95,6 +96,10 @@ class AgentViewModel(
     }
 
     // Dynamic field updates
+    fun updateMetaDatStatus(newStatus: MetaDatStatus) {
+        _uiState.update { it.copy(metaDatStatus = newStatus) }
+    }
+
     fun onInputTextChanged(newText: String) {
         _uiState.update { it.copy(inputText = newText) }
     }

@@ -9,3 +9,7 @@ coverage/
 app/secrets.properties
 secrets.properties
 pooliq-key.jks
+.gradle/
+local.properties
+secrets.properties
+*.jks
