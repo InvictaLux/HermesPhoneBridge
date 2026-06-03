@@ -39,6 +39,8 @@ class MainActivity : ComponentActivity() {
 
         // 1. Initialize Inputs and Repositories
         val inputSource = PhoneTextInputSource()
+        // Future Gate 6:
+        // val inputSource = MetaWearableInputSource()
         val api = OkHttpAgentApi()
         val repository = AgentRepository(api)
 
