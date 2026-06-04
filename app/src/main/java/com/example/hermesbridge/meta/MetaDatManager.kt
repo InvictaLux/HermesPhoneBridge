@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.util.Log
 import com.meta.wearable.dat.core.Wearables
+import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.types.RegistrationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,12 +39,10 @@ class MetaDatManager(private val context: Context) {
                 }
             }
 
-            // 3. Observe registration errors (Gate 7E)
+            // 3. Observe registration errors
             scope.launch {
                 Wearables.registrationErrorStream.collect { error ->
                     Log.e("HermesBridge", "Meta DAT Registration Error: $error")
-                    // Map specific errors if needed, but for now just show failed.
-                    // Version 0.7.0 might have META_AI_NOT_INSTALLED in error stream too.
                     val errorMessage = error.toString()
                     if (errorMessage.contains("META_AI_NOT_INSTALLED")) {
                         _status.value = MetaDatStatus.MissingMetaApp
@@ -59,6 +58,16 @@ class MetaDatManager(private val context: Context) {
     }
 
     private fun updateStatusFromState(state: RegistrationState) {
+        // If we are already in a session state, don't revert to Ready unless requested
+        val current = _status.value
+        if (current is MetaDatStatus.SessionReady || current is MetaDatStatus.NoDeviceFound || current is MetaDatStatus.SessionChecking) {
+            if (state != RegistrationState.REGISTERED) {
+                // We lost registration
+                _status.value = MetaDatStatus.RegistrationRequired
+            }
+            return
+        }
+
         _status.value = when (state) {
             RegistrationState.REGISTERED -> MetaDatStatus.Ready
             RegistrationState.REGISTERING -> MetaDatStatus.Initializing
@@ -68,10 +77,6 @@ class MetaDatManager(private val context: Context) {
         }
     }
 
-    /**
-     * Triggers a log-based refresh of current state. 
-     * Since the SDK uses StateFlows, the status property is already reactive.
-     */
     fun refreshStatus() {
         val currentState = Wearables.registrationState.value
         Log.d("HermesBridge", "Manual Status Refresh. Current State: $currentState")
@@ -86,6 +91,47 @@ class MetaDatManager(private val context: Context) {
         } catch (e: Exception) {
             Log.e("HermesBridge", "Failed to launch registration", e)
             _status.value = MetaDatStatus.Error("Launch failed: ${e.message}")
+        }
+    }
+
+    /**
+     * Attempts to create a device session to discover if hardware is available. (Gate 8A)
+     */
+    fun checkDeviceSession() {
+        if (Wearables.registrationState.value != RegistrationState.REGISTERED) {
+            Log.w("HermesBridge", "Cannot check session: Registration not ready.")
+            refreshStatus()
+            return
+        }
+
+        _status.value = MetaDatStatus.SessionChecking
+        Log.d("HermesBridge", "Checking for Meta wearable session...")
+
+        try {
+            val result = Wearables.createSession(AutoDeviceSelector())
+            
+            result.fold(
+                onSuccess = { session ->
+                    Log.i("HermesBridge", "Meta Device Session Created Successfully.")
+                    // We do NOT call session.start() yet.
+                    _status.value = MetaDatStatus.SessionReady
+                },
+                onFailure = { error, _ ->
+                    Log.e("HermesBridge", "Meta Device Session Creation Failed: $error")
+                    val errorMsg = error.toString()
+                    if (errorMsg.contains("NO_ELIGIBLE_DEVICE")) {
+                        _status.value = MetaDatStatus.NoDeviceFound
+                    } else {
+                        _status.value = MetaDatStatus.SessionError(errorMsg)
+                    }
+                }
+            )
+        } catch (e: SecurityException) {
+            Log.e("HermesBridge", "Permission denied during session check", e)
+            _status.value = MetaDatStatus.PermissionRequired
+        } catch (e: Exception) {
+            Log.e("HermesBridge", "Exception during session check", e)
+            _status.value = MetaDatStatus.SessionError(e.message ?: "Unknown error")
         }
     }
 }

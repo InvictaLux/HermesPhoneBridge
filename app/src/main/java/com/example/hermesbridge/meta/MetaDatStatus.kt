@@ -8,6 +8,14 @@ sealed class MetaDatStatus {
     object RegistrationRequired : MetaDatStatus()
     object RegistrationFailed : MetaDatStatus()
     object PermissionRequired : MetaDatStatus()
+    
+    // Session states (Gate 8A)
+    object SessionNotChecked : MetaDatStatus()
+    object SessionChecking : MetaDatStatus()
+    object SessionReady : MetaDatStatus()
+    object NoDeviceFound : MetaDatStatus()
+    data class SessionError(val message: String) : MetaDatStatus()
+
     data class Error(val message: String) : MetaDatStatus()
 
     fun getUserMessage(): String = when (this) {
@@ -18,6 +26,13 @@ sealed class MetaDatStatus {
         is RegistrationRequired -> "Meta DAT: Registration required"
         is RegistrationFailed -> "Meta DAT: Registration failed"
         is PermissionRequired -> "Meta DAT: Permission required"
+        
+        is SessionNotChecked -> "Meta Session: Not checked"
+        is SessionChecking -> "Meta Session: Searching for devices..."
+        is SessionReady -> "Meta Session: Ready (Connected)"
+        is NoDeviceFound -> "Meta Session: No paired glasses found"
+        is SessionError -> "Meta Session Error: $message"
+
         is Error -> "Meta DAT: Error: $message"
     }
 

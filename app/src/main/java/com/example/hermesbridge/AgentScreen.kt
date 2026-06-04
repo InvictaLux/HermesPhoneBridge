@@ -75,6 +75,18 @@ fun AgentScreen(
             }
         }
 
+        if (state.metaDatStatus is MetaDatStatus.Ready || 
+            state.metaDatStatus is MetaDatStatus.NoDeviceFound ||
+            state.metaDatStatus is MetaDatStatus.SessionError) {
+            Button(
+                onClick = { viewModel.onCheckDeviceSessionClicked() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.metaDatStatus !is MetaDatStatus.SessionChecking
+            ) {
+                Text(if (state.metaDatStatus is MetaDatStatus.SessionChecking) "Checking Session..." else "Check Meta Device Session")
+            }
+        }
+
         OutlinedTextField(
             value = state.inputText,
             onValueChange = { viewModel.onInputTextChanged(it) },

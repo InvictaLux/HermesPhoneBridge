@@ -91,6 +91,10 @@ class MainActivity : ComponentActivity() {
                         viewModel.updateMetaDatMessage("Registration flow launched.")
                         metaDatManager.startRegistration(this@MainActivity)
                     }
+                    is UiCommand.CheckMetaDeviceSession -> {
+                        viewModel.updateMetaDatMessage("Checking device session...")
+                        metaDatManager.checkDeviceSession()
+                    }
                 }
             }
         }
