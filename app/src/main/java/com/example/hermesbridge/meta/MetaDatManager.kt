@@ -33,20 +33,42 @@ class MetaDatManager(private val context: Context) {
             // 2. Observe registration state
             scope.launch {
                 Wearables.registrationState.collect { state ->
-                    Log.d("HermesBridge", "Meta DAT Registration State: $state")
-                    _status.value = when (state) {
-                        RegistrationState.REGISTERED -> MetaDatStatus.Ready
-                        RegistrationState.REGISTERING -> MetaDatStatus.Initializing
-                        RegistrationState.AVAILABLE -> MetaDatStatus.RegistrationRequired
-                        RegistrationState.UNAVAILABLE -> MetaDatStatus.MissingMetaApp
-                        else -> MetaDatStatus.Error("State: $state")
-                    }
+                    Log.d("HermesBridge", "Meta DAT Registration State Changed: $state")
+                    updateStatusFromState(state)
+                }
+            }
+
+            // 3. Observe registration errors (Gate 7E)
+            scope.launch {
+                Wearables.registrationErrorStream.collect { error ->
+                    Log.e("HermesBridge", "Meta DAT Registration Error: $error")
+                    _status.value = MetaDatStatus.Error("Registration failed: $error")
                 }
             }
         } catch (e: Exception) {
             Log.e("HermesBridge", "Failed to initialize Meta DAT SDK", e)
             _status.value = MetaDatStatus.Error(e.message ?: "Unknown error")
         }
+    }
+
+    private fun updateStatusFromState(state: RegistrationState) {
+        _status.value = when (state) {
+            RegistrationState.REGISTERED -> MetaDatStatus.Ready
+            RegistrationState.REGISTERING -> MetaDatStatus.Initializing
+            RegistrationState.AVAILABLE -> MetaDatStatus.RegistrationRequired
+            RegistrationState.UNAVAILABLE -> MetaDatStatus.MissingMetaApp
+            else -> MetaDatStatus.Error("State: $state")
+        }
+    }
+
+    /**
+     * Triggers a log-based refresh of current state. 
+     * Since the SDK uses StateFlows, the status property is already reactive.
+     */
+    fun refreshStatus() {
+        val currentState = Wearables.registrationState.value
+        Log.d("HermesBridge", "Manual Status Refresh. Current State: $currentState")
+        updateStatusFromState(currentState)
     }
 
     fun startRegistration(activity: Activity) {

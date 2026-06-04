@@ -70,12 +70,12 @@ class MainActivity : ComponentActivity() {
         metaDatManager = MetaDatManager(this)
         lifecycleScope.launch {
             metaDatManager.status.collect { status ->
-                Log.d("HermesBridge", "Meta DAT Status: $status")
+                Log.d("HermesBridge", "Meta DAT Status Update: $status")
                 viewModel.updateMetaDatStatus(status)
             }
         }
         
-        // Command listener for UI actions
+        // Command listener for UI actions (Gate 7D)
         lifecycleScope.launch {
             viewModel.commands.collect { command ->
                 when (command) {
@@ -85,7 +85,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-
+        
         metaDatManager.initialize()
 
         // Register battery status receiver
@@ -99,6 +99,14 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize()
                 )
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh Meta DAT status when returning to the app (Gate 7E)
+        if (::metaDatManager.isInitialized) {
+            metaDatManager.refreshStatus()
         }
     }
 
