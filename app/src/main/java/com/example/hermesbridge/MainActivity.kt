@@ -125,6 +125,14 @@ class MainActivity : ComponentActivity() {
                         viewModel.updateMetaDatMessage("Closing session...")
                         metaDatManager.closeDeviceSession()
                     }
+                    is UiCommand.ReconnectMetaSession -> {
+                        viewModel.updateMetaDatMessage("Reconnecting...")
+                        metaDatManager.reconnectDeviceSession()
+                    }
+                    is UiCommand.RefreshMetaSession -> {
+                        viewModel.updateMetaDatMessage("Refreshing health...")
+                        metaDatManager.refreshSessionHealth()
+                    }
                 }
             }
         }

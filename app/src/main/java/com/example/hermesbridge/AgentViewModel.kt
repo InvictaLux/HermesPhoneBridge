@@ -26,6 +26,8 @@ sealed class UiCommand {
     object RequestMetaPermissions : UiCommand()
     object CreateMetaSession : UiCommand()
     object CloseMetaSession : UiCommand()
+    object ReconnectMetaSession : UiCommand()
+    object RefreshMetaSession : UiCommand()
 }
 
 class AgentViewModel(
@@ -141,6 +143,18 @@ class AgentViewModel(
     fun onCloseSessionClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.CloseMetaSession)
+        }
+    }
+
+    fun onReconnectSessionClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.ReconnectMetaSession)
+        }
+    }
+
+    fun onRefreshSessionClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.RefreshMetaSession)
         }
     }
 

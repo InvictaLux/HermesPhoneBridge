@@ -2,6 +2,7 @@ package com.example.hermesbridge
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -105,7 +106,24 @@ fun AgentScreen(
 
         if (state.metaDatStatus is MetaDatStatus.SessionReady ||
             state.metaDatStatus is MetaDatStatus.SessionStarting ||
-            state.metaDatStatus is MetaDatStatus.SessionPaused) {
+            state.metaDatStatus is MetaDatStatus.SessionPaused ||
+            state.metaDatStatus is MetaDatStatus.SessionDisconnected) {
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.onReconnectSessionClicked() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Reconnect")
+                }
+                Button(
+                    onClick = { viewModel.onRefreshSessionClicked() },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Refresh")
+                }
+            }
+
             Button(
                 onClick = { viewModel.onCloseSessionClicked() },
                 modifier = Modifier.fillMaxWidth(),
