@@ -18,5 +18,6 @@ data class AgentUiState(
     val isBackendConnected: Boolean = true,
     val batteryLevel: Int = 100,
     val isBatteryCharging: Boolean = false,
-    val metaDatStatus: MetaDatStatus = MetaDatStatus.NotInitialized
+    val metaDatStatus: MetaDatStatus = MetaDatStatus.NotInitialized,
+    val metaDatMessage: String? = null
 )

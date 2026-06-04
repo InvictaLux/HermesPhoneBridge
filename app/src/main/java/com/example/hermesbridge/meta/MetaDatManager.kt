@@ -42,7 +42,14 @@ class MetaDatManager(private val context: Context) {
             scope.launch {
                 Wearables.registrationErrorStream.collect { error ->
                     Log.e("HermesBridge", "Meta DAT Registration Error: $error")
-                    _status.value = MetaDatStatus.Error("Registration failed: $error")
+                    // Map specific errors if needed, but for now just show failed.
+                    // Version 0.7.0 might have META_AI_NOT_INSTALLED in error stream too.
+                    val errorMessage = error.toString()
+                    if (errorMessage.contains("META_AI_NOT_INSTALLED")) {
+                        _status.value = MetaDatStatus.MissingMetaApp
+                    } else {
+                        _status.value = MetaDatStatus.RegistrationFailed
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -74,6 +81,7 @@ class MetaDatManager(private val context: Context) {
     fun startRegistration(activity: Activity) {
         try {
             Log.d("HermesBridge", "Launching Meta DAT Registration...")
+            _status.value = MetaDatStatus.Initializing
             Wearables.startRegistration(activity)
         } catch (e: Exception) {
             Log.e("HermesBridge", "Failed to launch registration", e)

@@ -109,6 +109,10 @@ class AgentViewModel(
         _uiState.update { it.copy(metaDatStatus = newStatus) }
     }
 
+    fun updateMetaDatMessage(message: String?) {
+        _uiState.update { it.copy(metaDatMessage = message) }
+    }
+
     fun onRegisterMetaDatClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.LaunchMetaDatRegistration)

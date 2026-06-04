@@ -48,18 +48,30 @@ fun AgentScreen(
             style = MaterialTheme.typography.bodyMedium
         )
 
-        Text(
-            text = "Meta DAT: ${state.metaDatStatus}",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.primary
-        )
+        Column {
+            Text(
+                text = state.metaDatStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            state.metaDatMessage?.let { msg ->
+                Text(
+                    text = msg,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
 
-        if (state.metaDatStatus is MetaDatStatus.RegistrationRequired) {
+        if (state.metaDatStatus is MetaDatStatus.RegistrationRequired || 
+            state.metaDatStatus is MetaDatStatus.MissingMetaApp ||
+            state.metaDatStatus is MetaDatStatus.RegistrationFailed) {
             Button(
                 onClick = { viewModel.onRegisterMetaDatClicked() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.metaDatStatus !is MetaDatStatus.Initializing
             ) {
-                Text("Register Meta DAT")
+                Text(if (state.metaDatStatus is MetaDatStatus.Initializing) "Launching..." else "Register Meta DAT")
             }
         }
 

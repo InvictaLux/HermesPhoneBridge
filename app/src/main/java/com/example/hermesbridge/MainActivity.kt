@@ -11,6 +11,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatManager
+import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import kotlinx.coroutines.launch
 
@@ -72,6 +73,13 @@ class MainActivity : ComponentActivity() {
             metaDatManager.status.collect { status ->
                 Log.d("HermesBridge", "Meta DAT Status Update: $status")
                 viewModel.updateMetaDatStatus(status)
+                
+                // Guidance messaging (Gate 7F)
+                if (status is MetaDatStatus.MissingMetaApp) {
+                    viewModel.updateMetaDatMessage("Install or open the Meta AI companion app, then return here.")
+                } else if (status is MetaDatStatus.Ready) {
+                    viewModel.updateMetaDatMessage("Registration ready.")
+                }
             }
         }
         
@@ -80,6 +88,7 @@ class MainActivity : ComponentActivity() {
             viewModel.commands.collect { command ->
                 when (command) {
                     is UiCommand.LaunchMetaDatRegistration -> {
+                        viewModel.updateMetaDatMessage("Registration flow launched.")
                         metaDatManager.startRegistration(this@MainActivity)
                     }
                 }
@@ -106,6 +115,7 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Refresh Meta DAT status when returning to the app (Gate 7E)
         if (::metaDatManager.isInitialized) {
+            viewModel.updateMetaDatMessage("Returned. Checking status...")
             metaDatManager.refreshStatus()
         }
     }
