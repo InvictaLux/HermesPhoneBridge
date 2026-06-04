@@ -61,6 +61,13 @@ fun AgentScreen(
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
+            state.permissionMessage?.let { pMsg ->
+                Text(
+                    text = pMsg,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (pMsg.contains("Ready")) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.error
+                )
+            }
         }
 
         if (state.metaDatStatus is MetaDatStatus.RegistrationRequired || 
@@ -75,9 +82,19 @@ fun AgentScreen(
             }
         }
 
+        if (state.permissionMessage?.contains("Ready") == false) {
+            Button(
+                onClick = { viewModel.onGrantPermissionsClicked() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Grant Meta Permissions")
+            }
+        }
+
         if (state.metaDatStatus is MetaDatStatus.Ready || 
             state.metaDatStatus is MetaDatStatus.NoDeviceFound ||
-            state.metaDatStatus is MetaDatStatus.SessionError) {
+            state.metaDatStatus is MetaDatStatus.SessionError ||
+            state.metaDatStatus is MetaDatStatus.SessionReady) {
             Button(
                 onClick = { viewModel.onCheckDeviceSessionClicked() },
                 modifier = Modifier.fillMaxWidth(),

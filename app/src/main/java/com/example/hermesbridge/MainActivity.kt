@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
@@ -12,6 +13,8 @@ import androidx.lifecycle.lifecycleScope
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatManager
 import com.example.hermesbridge.meta.MetaDatStatus
+import com.example.hermesbridge.permissions.MetaPermissionManager
+import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import kotlinx.coroutines.launch
 
@@ -20,6 +23,20 @@ class MainActivity : ComponentActivity() {
     private lateinit var viewModel: AgentViewModel
     private var speechOutput: AndroidTtsSpeechOutput? = null
     private lateinit var metaDatManager: MetaDatManager
+    private lateinit var permissionManager: MetaPermissionManager
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        val denied = results.filter { !it.value }.keys
+        if (denied.isEmpty()) {
+            Log.d("HermesBridge", "All permissions granted.")
+            refreshAllStatuses()
+        } else {
+            Log.w("HermesBridge", "Permissions denied: $denied")
+            viewModel.updatePermissionMessage("Permissions denied: ${denied.joinToString(", ")}")
+        }
+    }
 
     private val batteryReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: android.content.Intent) {
@@ -41,6 +58,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        permissionManager = MetaPermissionManager(this)
 
         // 1. Initialize Inputs and Repositories
         val inputSource = PhoneTextInputSource()
@@ -83,7 +102,7 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Command listener for UI actions (Gate 7D)
+        // Command listener for UI actions (Gate 7D, 8A, 8B)
         lifecycleScope.launch {
             viewModel.commands.collect { command ->
                 when (command) {
@@ -92,8 +111,15 @@ class MainActivity : ComponentActivity() {
                         metaDatManager.startRegistration(this@MainActivity)
                     }
                     is UiCommand.CheckMetaDeviceSession -> {
-                        viewModel.updateMetaDatMessage("Checking device session...")
-                        metaDatManager.checkDeviceSession()
+                        if (permissionManager.isReady()) {
+                            viewModel.updateMetaDatMessage("Checking device session...")
+                            metaDatManager.checkDeviceSession()
+                        } else {
+                            viewModel.updatePermissionMessage("Bluetooth permissions required for session check.")
+                        }
+                    }
+                    is UiCommand.RequestMetaPermissions -> {
+                        permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
                     }
                 }
             }
@@ -117,10 +143,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        // Refresh Meta DAT status when returning to the app (Gate 7E)
+        refreshAllStatuses()
+    }
+
+    private fun refreshAllStatuses() {
         if (::metaDatManager.isInitialized) {
-            viewModel.updateMetaDatMessage("Returned. Checking status...")
             metaDatManager.refreshStatus()
+        }
+        if (::permissionManager.isInitialized) {
+            val state = permissionManager.checkPermissionState()
+            val msg = when (state) {
+                is PermissionState.Ready -> "Meta Permissions: Ready"
+                is PermissionState.Missing -> "Meta Permissions: Required"
+            }
+            viewModel.updatePermissionMessage(msg)
         }
     }
 

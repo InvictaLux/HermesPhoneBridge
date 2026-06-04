@@ -19,5 +19,6 @@ data class AgentUiState(
     val batteryLevel: Int = 100,
     val isBatteryCharging: Boolean = false,
     val metaDatStatus: MetaDatStatus = MetaDatStatus.NotInitialized,
-    val metaDatMessage: String? = null
+    val metaDatMessage: String? = null,
+    val permissionMessage: String? = null
 )
