@@ -110,16 +110,20 @@ class MainActivity : ComponentActivity() {
                         viewModel.updateMetaDatMessage("Registration flow launched.")
                         metaDatManager.startRegistration(this@MainActivity)
                     }
-                    is UiCommand.CheckMetaDeviceSession -> {
-                        if (permissionManager.isReady()) {
-                            viewModel.updateMetaDatMessage("Checking device session...")
-                            metaDatManager.checkDeviceSession()
-                        } else {
-                            viewModel.updatePermissionMessage("Bluetooth permissions required for session check.")
-                        }
-                    }
                     is UiCommand.RequestMetaPermissions -> {
                         permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
+                    }
+                    is UiCommand.CreateMetaSession -> {
+                        if (permissionManager.isReady()) {
+                            viewModel.updateMetaDatMessage("Starting session...")
+                            metaDatManager.createDeviceSession()
+                        } else {
+                            viewModel.updatePermissionMessage("Bluetooth permissions required for session.")
+                        }
+                    }
+                    is UiCommand.CloseMetaSession -> {
+                        viewModel.updateMetaDatMessage("Closing session...")
+                        metaDatManager.closeDeviceSession()
                     }
                 }
             }
@@ -174,6 +178,9 @@ class MainActivity : ComponentActivity() {
             // Already unregistered or wasn't registered
         }
         // Release hardware synthesis bindings
+        if (::metaDatManager.isInitialized) {
+            metaDatManager.closeDeviceSession()
+        }
         speechOutput?.shutdown()
     }
 }

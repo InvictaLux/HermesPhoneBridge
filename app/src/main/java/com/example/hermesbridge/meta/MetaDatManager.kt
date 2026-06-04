@@ -5,9 +5,12 @@ import android.content.Context
 import android.util.Log
 import com.meta.wearable.dat.core.Wearables
 import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
+import com.meta.wearable.dat.core.session.DeviceSession
+import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.RegistrationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +21,9 @@ class MetaDatManager(private val context: Context) {
     val status: StateFlow<MetaDatStatus> = _status.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.Main)
+    
+    private var currentSession: DeviceSession? = null
+    private var sessionStateJob: Job? = null
 
     fun initialize() {
         if (_status.value !is MetaDatStatus.NotInitialized && _status.value !is MetaDatStatus.Error) {
@@ -60,10 +66,14 @@ class MetaDatManager(private val context: Context) {
     private fun updateStatusFromState(state: RegistrationState) {
         // If we are already in a session state, don't revert to Ready unless requested
         val current = _status.value
-        if (current is MetaDatStatus.SessionReady || current is MetaDatStatus.NoDeviceFound || current is MetaDatStatus.SessionChecking) {
+        if (current is MetaDatStatus.SessionReady || 
+            current is MetaDatStatus.SessionStarting || 
+            current is MetaDatStatus.SessionStopping ||
+            current is MetaDatStatus.SessionPaused) {
             if (state != RegistrationState.REGISTERED) {
                 // We lost registration
                 _status.value = MetaDatStatus.RegistrationRequired
+                closeDeviceSession()
             }
             return
         }
@@ -95,26 +105,48 @@ class MetaDatManager(private val context: Context) {
     }
 
     /**
-     * Attempts to create a device session to discover if hardware is available. (Gate 8A)
+     * Acquisition of a device session and starting it. (Gate 8C)
      */
-    fun checkDeviceSession() {
+    fun createDeviceSession() {
         if (Wearables.registrationState.value != RegistrationState.REGISTERED) {
-            Log.w("HermesBridge", "Cannot check session: Registration not ready.")
+            Log.w("HermesBridge", "Cannot create session: Registration not ready.")
             refreshStatus()
             return
         }
 
-        _status.value = MetaDatStatus.SessionChecking
-        Log.d("HermesBridge", "Checking for Meta wearable session...")
+        if (currentSession != null) {
+            Log.i("HermesBridge", "Session already exists.")
+            return
+        }
+
+        Log.d("HermesBridge", "Creating Meta wearable session...")
 
         try {
             val result = Wearables.createSession(AutoDeviceSelector())
             
             result.fold(
                 onSuccess = { session ->
-                    Log.i("HermesBridge", "Meta Device Session Created Successfully.")
-                    // We do NOT call session.start() yet.
-                    _status.value = MetaDatStatus.SessionReady
+                    Log.i("HermesBridge", "Meta Device Session Acquired.")
+                    currentSession = session
+                    
+                    // Observe session state
+                    sessionStateJob?.cancel()
+                    sessionStateJob = scope.launch {
+                        session.state.collect { sessionState ->
+                            Log.d("HermesBridge", "Session State Change: $sessionState")
+                            _status.value = when (sessionState) {
+                                DeviceSessionState.IDLE -> MetaDatStatus.SessionIdle
+                                DeviceSessionState.STARTING -> MetaDatStatus.SessionStarting
+                                DeviceSessionState.STARTED -> MetaDatStatus.SessionReady
+                                DeviceSessionState.PAUSED -> MetaDatStatus.SessionPaused
+                                DeviceSessionState.STOPPING -> MetaDatStatus.SessionStopping
+                                DeviceSessionState.STOPPED -> MetaDatStatus.SessionStopped
+                            }
+                        }
+                    }
+
+                    // Start the session (connection handshake)
+                    session.start()
                 },
                 onFailure = { error, _ ->
                     Log.e("HermesBridge", "Meta Device Session Creation Failed: $error")
@@ -127,11 +159,33 @@ class MetaDatManager(private val context: Context) {
                 }
             )
         } catch (e: SecurityException) {
-            Log.e("HermesBridge", "Permission denied during session check", e)
+            Log.e("HermesBridge", "Permission denied during session creation", e)
             _status.value = MetaDatStatus.PermissionRequired
         } catch (e: Exception) {
-            Log.e("HermesBridge", "Exception during session check", e)
+            Log.e("HermesBridge", "Exception during session creation", e)
             _status.value = MetaDatStatus.SessionError(e.message ?: "Unknown error")
         }
+    }
+
+    fun closeDeviceSession() {
+        Log.d("HermesBridge", "Closing Meta device session...")
+        try {
+            currentSession?.stop()
+        } catch (e: Exception) {
+            Log.e("HermesBridge", "Error stopping session", e)
+        } finally {
+            currentSession = null
+            sessionStateJob?.cancel()
+            sessionStateJob = null
+            if (_status.value is MetaDatStatus.SessionReady ||
+                _status.value is MetaDatStatus.SessionStarting ||
+                _status.value is MetaDatStatus.SessionStopping) {
+                _status.value = MetaDatStatus.SessionStopped
+            }
+        }
+    }
+
+    fun hasActiveSession(): Boolean {
+        return currentSession != null
     }
 }

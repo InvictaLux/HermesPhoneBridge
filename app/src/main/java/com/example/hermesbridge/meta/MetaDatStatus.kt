@@ -9,10 +9,13 @@ sealed class MetaDatStatus {
     object RegistrationFailed : MetaDatStatus()
     object PermissionRequired : MetaDatStatus()
     
-    // Session states (Gate 8A)
-    object SessionNotChecked : MetaDatStatus()
-    object SessionChecking : MetaDatStatus()
+    // Session states (Gate 8C)
+    object SessionIdle : MetaDatStatus()
+    object SessionStarting : MetaDatStatus()
     object SessionReady : MetaDatStatus()
+    object SessionPaused : MetaDatStatus()
+    object SessionStopping : MetaDatStatus()
+    object SessionStopped : MetaDatStatus()
     object NoDeviceFound : MetaDatStatus()
     data class SessionError(val message: String) : MetaDatStatus()
 
@@ -27,9 +30,12 @@ sealed class MetaDatStatus {
         is RegistrationFailed -> "Meta DAT: Registration failed"
         is PermissionRequired -> "Meta DAT: Permission required"
         
-        is SessionNotChecked -> "Meta Session: Not checked"
-        is SessionChecking -> "Meta Session: Searching for devices..."
+        is SessionIdle -> "Meta Session: Idle"
+        is SessionStarting -> "Meta Session: Connecting..."
         is SessionReady -> "Meta Session: Ready (Connected)"
+        is SessionPaused -> "Meta Session: Paused"
+        is SessionStopping -> "Meta Session: Disconnecting..."
+        is SessionStopped -> "Meta Session: Disconnected"
         is NoDeviceFound -> "Meta Session: No paired glasses found"
         is SessionError -> "Meta Session Error: $message"
 

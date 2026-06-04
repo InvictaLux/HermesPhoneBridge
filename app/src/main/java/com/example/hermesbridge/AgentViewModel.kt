@@ -23,8 +23,9 @@ import java.util.TimeZone
 
 sealed class UiCommand {
     object LaunchMetaDatRegistration : UiCommand()
-    object CheckMetaDeviceSession : UiCommand()
     object RequestMetaPermissions : UiCommand()
+    object CreateMetaSession : UiCommand()
+    object CloseMetaSession : UiCommand()
 }
 
 class AgentViewModel(
@@ -125,15 +126,21 @@ class AgentViewModel(
         }
     }
 
-    fun onCheckDeviceSessionClicked() {
-        viewModelScope.launch {
-            _commands.emit(UiCommand.CheckMetaDeviceSession)
-        }
-    }
-
     fun onGrantPermissionsClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.RequestMetaPermissions)
+        }
+    }
+
+    fun onCreateSessionClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.CreateMetaSession)
+        }
+    }
+
+    fun onCloseSessionClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.CloseMetaSession)
         }
     }
 

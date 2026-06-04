@@ -94,13 +94,26 @@ fun AgentScreen(
         if (state.metaDatStatus is MetaDatStatus.Ready || 
             state.metaDatStatus is MetaDatStatus.NoDeviceFound ||
             state.metaDatStatus is MetaDatStatus.SessionError ||
-            state.metaDatStatus is MetaDatStatus.SessionReady) {
+            state.metaDatStatus is MetaDatStatus.SessionStopped) {
             Button(
-                onClick = { viewModel.onCheckDeviceSessionClicked() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = state.metaDatStatus !is MetaDatStatus.SessionChecking
+                onClick = { viewModel.onCreateSessionClicked() },
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(if (state.metaDatStatus is MetaDatStatus.SessionChecking) "Checking Session..." else "Check Meta Device Session")
+                Text("Create Meta Session")
+            }
+        }
+
+        if (state.metaDatStatus is MetaDatStatus.SessionReady ||
+            state.metaDatStatus is MetaDatStatus.SessionStarting ||
+            state.metaDatStatus is MetaDatStatus.SessionPaused) {
+            Button(
+                onClick = { viewModel.onCloseSessionClicked() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text("Close Meta Session")
             }
         }
 
