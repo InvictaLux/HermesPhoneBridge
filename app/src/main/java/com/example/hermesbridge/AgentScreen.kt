@@ -26,6 +26,7 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import com.example.hermesbridge.conversation.ConversationTurnState
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -229,20 +230,35 @@ fun AgentScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            Button(
-                onClick = { viewModel.onStartWearableSpeechTestClicked() },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = state.audioRouteStatus is BluetoothAudioRouteStatus.Routed && 
-                          state.speechStatus !is SpeechRecognitionStatus.Listening
-            ) {
-                Text("Start Wearable Speech Test")
-            }
-
             Text(
-                text = state.speechStatus.getUserMessage(),
-                style = MaterialTheme.typography.labelSmall,
+                text = state.turnState.getUserMessage(),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.onStartWearableSpeechTestClicked() },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.metaDatStatus is MetaDatStatus.SessionReady && 
+                              state.turnState is ConversationTurnState.Idle
+                ) {
+                    Text("Ask Hermes Through Glasses")
+                }
+                
+                if (state.turnState !is ConversationTurnState.Idle) {
+                    Button(
+                        onClick = { viewModel.onStopWearableSpeechTestClicked() },
+                        modifier = Modifier.weight(0.5f),
+                        colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            }
 
             if (state.speechResult.partialTranscript.isNotBlank() || state.speechResult.finalTranscript.isNotBlank()) {
                 Card(

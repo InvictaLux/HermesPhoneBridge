@@ -13,6 +13,7 @@ import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
+import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
@@ -163,6 +164,10 @@ class AgentViewModel(
 
     fun updateAudioRouteStatus(status: BluetoothAudioRouteStatus) {
         _uiState.update { it.copy(audioRouteStatus = status) }
+    }
+
+    fun updateConversationTurnState(status: ConversationTurnState) {
+        _uiState.update { it.copy(turnState = status) }
     }
 
     fun onRegisterMetaDatClicked() {
@@ -376,6 +381,15 @@ class AgentViewModel(
     fun stopSpeaking() {
         speechOutput?.stop()
         _uiState.update { it.copy(isTtsSpeaking = false) }
+    }
+
+    fun speakResponse(text: String, onComplete: () -> Unit = {}) {
+        _uiState.update { it.copy(isTtsSpeaking = true) }
+        speechOutput?.speak(text) {
+            _uiState.update { it.copy(isTtsSpeaking = false) }
+            addEvent(LogEvent.TtsSpoken(text = text))
+            onComplete()
+        }
     }
 
     fun updateBatteryState(level: Int, isCharging: Boolean) {

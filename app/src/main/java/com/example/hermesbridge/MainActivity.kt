@@ -18,6 +18,7 @@ import com.example.hermesbridge.permissions.MetaPermissionManager
 import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.audio.PcmCaptureManager
+import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
@@ -34,6 +35,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var pcmCaptureManager: PcmCaptureManager
     private lateinit var speechToText: AndroidSpeechRecognizerInput
     private lateinit var wearableInputSource: MetaWearableInputSource
+    private lateinit var turnCoordinator: ConversationTurnCoordinator
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -91,6 +93,15 @@ class MainActivity : ComponentActivity() {
         )
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
 
+        turnCoordinator = ConversationTurnCoordinator(
+            lifecycleScope,
+            viewModel,
+            metaDatManager = MetaDatManager(this),
+            audioRouteManager,
+            speechToText,
+            wearableInputSource
+        )
+
         // Connect wearable input source to the ViewModel logic via a bridge method
         wearableInputSource.setListener { event ->
             viewModel.submitExternalBridgeEvent(event)
@@ -108,7 +119,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // 4. Meta DAT Initialization Status Only (Gate 7C)
-        metaDatManager = MetaDatManager(this)
+        metaDatManager = turnCoordinator.metaDatManager
         lifecycleScope.launch {
             metaDatManager.status.collect { status ->
                 Log.d("HermesBridge", "Meta DAT Status Update: $status")
@@ -160,17 +171,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Gate 9F: Integration of final wearable transcript
         lifecycleScope.launch {
-            combine(speechToText.result, viewModel.uiState) { result, state ->
-                result to state.isLoading
-            }.collect { (result, isLoading) ->
-                if (result.isFinal && result.finalTranscript.isNotBlank() && !isLoading) {
-                    Log.i("HermesBridge", "Routing wearable transcript to Hermes: ${result.finalTranscript}")
-                    viewModel.updateMetaDatMessage("Sending wearable transcript to Hermes...")
-                    wearableInputSource.submitTranscript(result.finalTranscript, result.confidence)
-                }
+            speechToText.result.collect { result ->
                 viewModel.updateSpeechResult(result)
+            }
+        }
+
+        lifecycleScope.launch {
+            turnCoordinator.turnState.collect { status ->
+                Log.d("HermesBridge", "Turn State Update: $status")
+                viewModel.updateConversationTurnState(status)
             }
         }
         
@@ -227,10 +237,10 @@ class MainActivity : ComponentActivity() {
                         pcmCaptureManager.startCapture()
                     }
                     is UiCommand.StartWearableSpeechTest -> {
-                        speechToText.startListening()
+                        turnCoordinator.startWearableTurn()
                     }
                     is UiCommand.StopWearableSpeechTest -> {
-                        speechToText.stopListening()
+                        turnCoordinator.cancelTurn()
                     }
                 }
             }

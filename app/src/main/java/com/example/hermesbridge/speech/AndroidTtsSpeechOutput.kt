@@ -13,6 +13,7 @@ class AndroidTtsSpeechOutput(
 
     private var tts: TextToSpeech? = TextToSpeech(context.applicationContext, this)
     private var isInitialized = false
+    private var activeOnComplete: (() -> Unit)? = null
 
     init {
         tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
@@ -22,11 +23,15 @@ class AndroidTtsSpeechOutput(
             
             override fun onDone(utteranceId: String?) {
                 Log.d("SpeechOutput", "Speech finished")
+                activeOnComplete?.invoke()
+                activeOnComplete = null
             }
 
             @Deprecated("Deprecated in Java")
             override fun onError(utteranceId: String?) {
                 Log.e("SpeechOutput", "Speech error occurred")
+                activeOnComplete?.invoke()
+                activeOnComplete = null
             }
         })
     }
@@ -50,8 +55,13 @@ class AndroidTtsSpeechOutput(
         }
     }
 
-    override fun speak(text: String) {
-        if (text.isBlank()) return
+    override fun speak(text: String, onComplete: () -> Unit) {
+        if (text.isBlank()) {
+            onComplete()
+            return
+        }
+        
+        activeOnComplete = onComplete
         
         if (isInitialized && tts != null) {
             val params = android.os.Bundle()
@@ -59,6 +69,7 @@ class AndroidTtsSpeechOutput(
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "hermes_response")
         } else {
             Log.w("SpeechOutput", "Attempted speech but TTS engine is unavailable")
+            onComplete()
         }
     }
 
@@ -77,6 +88,7 @@ class AndroidTtsSpeechOutput(
         } finally {
             tts = null
             isInitialized = false
+            activeOnComplete = null
         }
     }
 }

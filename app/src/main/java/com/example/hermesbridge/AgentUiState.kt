@@ -8,6 +8,7 @@ import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
+import com.example.hermesbridge.conversation.ConversationTurnState
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -34,5 +35,6 @@ data class AgentUiState(
     val pcmCaptureStatus: PcmCaptureStatus = PcmCaptureStatus.Idle,
     val pcmCaptureResult: PcmCaptureResult = PcmCaptureResult(),
     val speechStatus: SpeechRecognitionStatus = SpeechRecognitionStatus.Idle,
-    val speechResult: SpeechRecognitionResult = SpeechRecognitionResult()
+    val speechResult: SpeechRecognitionResult = SpeechRecognitionResult(),
+    val turnState: ConversationTurnState = ConversationTurnState.Idle
 )
