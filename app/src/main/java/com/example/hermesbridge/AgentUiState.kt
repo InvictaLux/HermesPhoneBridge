@@ -8,12 +8,13 @@ import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
+import com.example.hermesbridge.conversation.ConversationTurn
 import com.example.hermesbridge.conversation.ConversationTurnState
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
     val deviceId: String = AppConfig.DEFAULT_DEVICE_ID,
-    val sessionId: String = AppConfig.DEFAULT_SESSION_ID,
+    val sessionId: String = "", // Will be initialized by ViewModel
     val inputText: String = "",
     val isLoading: Boolean = false,
     val latestResponse: String = "",
@@ -36,5 +37,7 @@ data class AgentUiState(
     val pcmCaptureResult: PcmCaptureResult = PcmCaptureResult(),
     val speechStatus: SpeechRecognitionStatus = SpeechRecognitionStatus.Idle,
     val speechResult: SpeechRecognitionResult = SpeechRecognitionResult(),
-    val turnState: ConversationTurnState = ConversationTurnState.Idle
+    val turnState: ConversationTurnState = ConversationTurnState.Idle,
+    val conversationHistory: List<ConversationTurn> = emptyList(),
+    val currentTurnId: String? = null
 )

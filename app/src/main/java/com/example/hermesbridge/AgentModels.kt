@@ -8,7 +8,9 @@ data class AgentMetadata(
     val wearable: String = "none",
     @SerializedName("audio_transcribed_on_edge") val audioTranscribedOnEdge: Boolean = true,
     @SerializedName("speech_output_on_edge") val speechOutputOnEdge: Boolean = false,
-    @SerializedName("test_mode") val testMode: Boolean = true
+    @SerializedName("test_mode") val testMode: Boolean = true,
+    @SerializedName("turn_id") val turnId: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null
 )
 
 data class AgentRequest(

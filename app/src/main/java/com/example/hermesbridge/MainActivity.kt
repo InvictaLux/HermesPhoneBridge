@@ -93,10 +93,11 @@ class MainActivity : ComponentActivity() {
         )
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
 
+        metaDatManager = MetaDatManager(this)
         turnCoordinator = ConversationTurnCoordinator(
             lifecycleScope,
             viewModel,
-            metaDatManager = MetaDatManager(this),
+            metaDatManager,
             audioRouteManager,
             speechToText,
             wearableInputSource
@@ -241,6 +242,9 @@ class MainActivity : ComponentActivity() {
                     }
                     is UiCommand.StopWearableSpeechTest -> {
                         turnCoordinator.cancelTurn()
+                    }
+                    is UiCommand.NewSession -> {
+                        viewModel.startNewSession()
                     }
                 }
             }

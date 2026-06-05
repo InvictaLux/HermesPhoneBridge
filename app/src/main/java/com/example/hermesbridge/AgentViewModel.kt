@@ -2,18 +2,18 @@ package com.example.hermesbridge
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import com.example.hermesbridge.bridge.BridgeEvent as InputBridgeEvent
 import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
+import com.example.hermesbridge.conversation.*
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.meta.MetaCapabilityStatus
 import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
-import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
@@ -29,6 +29,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.UUID
 
 sealed class UiCommand {
     object LaunchMetaDatRegistration : UiCommand()
@@ -44,6 +45,7 @@ sealed class UiCommand {
     object CapturePcmSample : UiCommand()
     object StartWearableSpeechTest : UiCommand()
     object StopWearableSpeechTest : UiCommand()
+    object NewSession : UiCommand()
 }
 
 class AgentViewModel(
@@ -64,6 +66,7 @@ class AgentViewModel(
     )
 
     private var speechOutput: SpeechOutput? = null
+    private val MAX_HISTORY = 20
 
     init {
         // Load configurations from persistence
@@ -79,44 +82,37 @@ class AgentViewModel(
             defaultId
         }
 
-        // Check if session ID exists, otherwise generate a new one
-        val hasSessionId = sharedPrefs.contains(AppConfig.KEY_SESSION_ID)
-        val savedSessionId: String
-        val isNewSession: Boolean
+        // Initialize Session ID (Gate 10B)
+        startNewSession(savedApiUrl, savedDeviceId)
 
-        if (hasSessionId) {
-            savedSessionId = sharedPrefs.getString(AppConfig.KEY_SESSION_ID, AppConfig.DEFAULT_SESSION_ID) ?: AppConfig.DEFAULT_SESSION_ID
-            isNewSession = false
-        } else {
-            // Generate a fresh session ID in a unique UUID-based format
-            val randomUuid = java.util.UUID.randomUUID().toString().substring(0, 8)
-            savedSessionId = "phone-session-$randomUuid"
-            sharedPrefs.edit().putString(AppConfig.KEY_SESSION_ID, savedSessionId).apply()
-            isNewSession = true
+        // Connect the InputSource text emissions to the transmission pipeline
+        inputSource.setListener { event ->
+            // Manual phone text usually comes through here
+            val source = if (event.source == "phone_text") ConversationTurnSource.PhoneText else ConversationTurnSource.MetaWearableVoice
+            submitNewTurn(event.text, source)
         }
+        inputSource.start()
+    }
+
+    fun startNewSession(apiUrl: String? = null, deviceId: String? = null) {
+        val newSessionId = "phone-session-${UUID.randomUUID().toString().substring(0, 8)}"
+        val url = apiUrl ?: _uiState.value.apiUrl
+        val dId = deviceId ?: _uiState.value.deviceId
 
         _uiState.update {
             it.copy(
-                apiUrl = savedApiUrl,
-                deviceId = savedDeviceId,
-                sessionId = savedSessionId,
+                apiUrl = url,
+                deviceId = dId,
+                sessionId = newSessionId,
+                conversationHistory = emptyList(),
+                currentTurnId = null,
+                latestResponse = "",
+                errorMessage = null,
                 inputSourceName = if (inputSource is PhoneTextInputSource) "On-Screen Keyboard" else "External Source",
                 inputSourceType = if (inputSource is PhoneTextInputSource) "phone_text" else "unknown"
             )
         }
-
-        // Connect the InputSource text emissions to the transmission pipeline
-        inputSource.setListener { event ->
-            sendTextToBackend(event.text, event.source)
-        }
-        inputSource.start()
-
-        // If a new session ID was dynamically generated on startup, send initialized event to the backend
-        if (isNewSession) {
-            viewModelScope.launch {
-                sendTextToBackend("New Session Initialized", "system")
-            }
-        }
+        Log.i("HermesSession", "Started new session: $newSessionId")
     }
 
     // Configures the voice output engine (AndroidTtsSpeechOutput)
@@ -248,6 +244,12 @@ class AgentViewModel(
         }
     }
 
+    fun onNewSessionClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.NewSession)
+        }
+    }
+
     fun onInputTextChanged(newText: String) {
         _uiState.update { it.copy(inputText = newText) }
     }
@@ -285,25 +287,67 @@ class AgentViewModel(
         _uiState.update { it.copy(events = emptyList()) }
     }
 
-    fun submitExternalBridgeEvent(event: InputBridgeEvent) {
-        sendTextToBackend(event.text, event.source)
+    fun submitExternalBridgeEvent(event: com.example.hermesbridge.bridge.BridgeEvent) {
+        val source = if (event.source.contains("wearable")) ConversationTurnSource.MetaWearableVoice else ConversationTurnSource.PhoneText
+        submitNewTurn(event.text, source)
+    }
+
+    private fun submitNewTurn(text: String, source: ConversationTurnSource) {
+        if (_uiState.value.isLoading) {
+            Log.w("HermesTurn", "Ignoring input while loading.")
+            return
+        }
+
+        val turnId = UUID.randomUUID().toString()
+        val createdAt = getIsoTimestamp()
+        val turn = ConversationTurn(
+            turnId = turnId,
+            sessionId = _uiState.value.sessionId,
+            source = source,
+            inputText = text,
+            createdAt = createdAt,
+            status = ConversationTurnStatus.Pending
+        )
+
+        _uiState.update { state ->
+            val newHistory = (listOf(turn) + state.conversationHistory).take(MAX_HISTORY)
+            state.copy(
+                conversationHistory = newHistory,
+                currentTurnId = turnId
+            )
+        }
+
+        sendTextToBackend(text, turnId, source)
+    }
+
+    fun retryTurn(turn: ConversationTurn) {
+        if (_uiState.value.isLoading) return
+        Log.i("HermesTurn", "Retrying turn: ${turn.turnId}")
+        submitNewTurn(turn.inputText, turn.source)
     }
 
     // Pipeline: Receives input, constructs API POST, handles feedback
-    private fun sendTextToBackend(rawText: String, source: String) {
+    private fun sendTextToBackend(rawText: String, turnId: String, source: ConversationTurnSource) {
         viewModelScope.launch {
             val currentState = _uiState.value
             val timestampIso = getIsoTimestamp()
 
             // 1. Post local input event
-            val inputEvent = LogEvent.TextInput(text = rawText)
-            addEvent(inputEvent)
+            addEvent(LogEvent.TextInput(text = rawText))
 
-            // 2. Mark loading and post sent message
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            // 2. Mark loading and update turn status
+            _uiState.update { state ->
+                state.copy(
+                    isLoading = true,
+                    errorMessage = null,
+                    conversationHistory = state.conversationHistory.map {
+                        if (it.turnId == turnId) it.copy(status = ConversationTurnStatus.Sending) else it
+                    }
+                )
+            }
             addEvent(LogEvent.NetworkRequestSent(url = currentState.apiUrl))
 
-            // 3. Assemble JSON Payload strictly adhering to the schema request
+            // 3. Assemble JSON Payload
             val requestPayload = AgentRequest(
                 deviceId = currentState.deviceId,
                 sessionId = currentState.sessionId,
@@ -311,53 +355,61 @@ class AgentViewModel(
                 text = rawText,
                 timestamp = timestampIso,
                 metadata = AgentMetadata(
-                    source = source,
-                    wearable = if (source == "meta_wearable_voice") "meta_glasses" else "none"
+                    source = if (source == ConversationTurnSource.MetaWearableVoice) "meta_wearable_voice" else "phone_text",
+                    wearable = if (source == ConversationTurnSource.MetaWearableVoice) "meta_glasses" else "none",
+                    turnId = turnId,
+                    createdAt = timestampIso
                 )
             )
 
             // 4. Perform Network Request
             val response = repository.sendMessage(currentState.apiUrl, requestPayload)
 
+            // Stale response protection
+            if (_uiState.value.currentTurnId != turnId) {
+                Log.w("HermesTurn", "Ignoring stale response for turn $turnId. Current turn is ${_uiState.value.currentTurnId}")
+                return@launch
+            }
+
             _uiState.update { it.copy(isLoading = false) }
 
             if (response.error == null) {
                 val textToSpeak = response.finalResponseText
 
-                _uiState.update {
-                    it.copy(
+                _uiState.update { state ->
+                    state.copy(
                         latestResponse = textToSpeak,
                         errorMessage = null,
-                        isBackendConnected = true
+                        isBackendConnected = true,
+                        conversationHistory = state.conversationHistory.map {
+                            if (it.turnId == turnId) it.copy(
+                                status = ConversationTurnStatus.Completed,
+                                responseText = textToSpeak,
+                                completedAt = getIsoTimestamp()
+                            ) else it
+                        }
                     )
                 }
 
                 // Log response receipt
                 addEvent(LogEvent.NetworkResponseReceived(responseText = textToSpeak))
 
-                // Robustly capture backend session ID rotation/sync and save to SharedPreferences
-                val responseSessionId = response.sessionId
-                if (!responseSessionId.isNullOrEmpty() && responseSessionId != _uiState.value.sessionId) {
-                    _uiState.update { it.copy(sessionId = responseSessionId) }
-                    sharedPrefs.edit().putString(AppConfig.KEY_SESSION_ID, responseSessionId).apply()
-                    addEvent(LogEvent.NetworkResponseReceived(
-                        responseText = "[Session Sync] Updated local Session ID to: $responseSessionId"
-                    ))
-                }
-
                 // 5. Trigger Speech synthesis
-                _uiState.update { it.copy(isTtsSpeaking = true) }
-                speechOutput?.speak(textToSpeak)
-                
-                addEvent(LogEvent.TtsSpoken(text = textToSpeak))
+                speakResponse(textToSpeak)
 
             } else {
                 val errorDetails = response.error ?: "Communication Failure"
-                _uiState.update {
-                    it.copy(
+                _uiState.update { state ->
+                    state.copy(
                         errorMessage = errorDetails,
                         latestResponse = "",
-                        isBackendConnected = false
+                        isBackendConnected = false,
+                        conversationHistory = state.conversationHistory.map {
+                            if (it.turnId == turnId) it.copy(
+                                status = ConversationTurnStatus.Failed,
+                                errorMessage = errorDetails
+                            ) else it
+                        }
                     )
                 }
                 addEvent(LogEvent.ErrorOccurred(error = errorDetails))

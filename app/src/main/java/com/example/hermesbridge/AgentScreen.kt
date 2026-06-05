@@ -27,6 +27,7 @@ import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.conversation.ConversationTurnState
+import com.example.hermesbridge.conversation.ConversationTurnStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -52,6 +53,14 @@ fun AgentScreen(
             text = "Phone test bridge to Hermes backend",
             style = MaterialTheme.typography.bodyMedium
         )
+
+        Button(
+            onClick = { viewModel.onNewSessionClicked() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+        ) {
+            Text("New Session")
+        }
 
         Column {
             Text(
@@ -356,6 +365,69 @@ fun AgentScreen(
                         "No response yet."
                     }
                 )
+            }
+        }
+
+        if (state.conversationHistory.isNotEmpty()) {
+            Text(
+                text = "Conversation History",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            state.conversationHistory.forEach { turn ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = when (turn.status) {
+                            ConversationTurnStatus.Completed -> MaterialTheme.colorScheme.surface
+                            ConversationTurnStatus.Failed -> MaterialTheme.colorScheme.errorContainer
+                            else -> MaterialTheme.colorScheme.surfaceVariant
+                        }
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = turn.source.name,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = turn.status.name,
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                        Text(
+                            text = turn.inputText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        turn.responseText?.let {
+                            Text(
+                                text = "Hermes: $it",
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        turn.errorMessage?.let {
+                            Text(
+                                text = "Error: $it",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                            Button(
+                                onClick = { viewModel.retryTurn(turn) },
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Text("Retry")
+                            }
+                        }
+                    }
+                }
             }
         }
     }
