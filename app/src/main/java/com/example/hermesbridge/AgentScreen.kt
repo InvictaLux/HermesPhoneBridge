@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.hermesbridge.meta.MetaDatStatus
+import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -160,6 +161,31 @@ fun AgentScreen(
                 text = "Audio Info:\n${state.metaAudioInfo.toDisplayString()}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.secondary
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.onStartAudioRouteClicked() },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.audioRouteStatus !is BluetoothAudioRouteStatus.Routed
+                ) {
+                    Text("Start Audio Route")
+                }
+                Button(
+                    onClick = { viewModel.onStopAudioRouteClicked() },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.audioRouteStatus is BluetoothAudioRouteStatus.Routed
+                ) {
+                    Text("Stop Audio Route")
+                }
+            }
+
+            Text(
+                text = state.audioRouteStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary
             )
         }
 

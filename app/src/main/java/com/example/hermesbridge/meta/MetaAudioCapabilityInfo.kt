@@ -10,10 +10,10 @@ data class MetaAudioCapabilityInfo(
     val sampleRateHz: Int = 8000,
     val channelCount: Int = 1,
     val encoding: String = "ENCODING_PCM_16BIT",
-    val startMethod: String = "AudioManager.startBluetoothSco()",
-    val stopMethod: String = "AudioManager.stopBluetoothSco()",
-    val sessionRequirement: String = "Active DeviceSession recommended for coordination",
-    val notes: String = "8kHz mono bidirectional audio. Mutually exclusive with A2DP high-quality stereo.",
+    val startMethod: String = "AudioManager.startBluetoothSco() / setCommunicationDevice()",
+    val stopMethod: String = "AudioManager.stopBluetoothSco() / clearCommunicationDevice()",
+    val sessionRequirement: String = "Active DeviceSession required for coordination",
+    val notes: String = "8kHz mono bidirectional audio. Requires MODIFY_AUDIO_SETTINGS. Mutually exclusive with A2DP high-quality stereo.",
     val error: String? = null
 ) {
     fun toDisplayString(): String {

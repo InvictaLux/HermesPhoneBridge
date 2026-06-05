@@ -15,6 +15,7 @@ import com.example.hermesbridge.meta.MetaDatManager
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.permissions.MetaPermissionManager
 import com.example.hermesbridge.permissions.PermissionState
+import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import kotlinx.coroutines.launch
 
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
     private var speechOutput: AndroidTtsSpeechOutput? = null
     private lateinit var metaDatManager: MetaDatManager
     private lateinit var permissionManager: MetaPermissionManager
+    private lateinit var audioRouteManager: BluetoothAudioRouteManager
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -60,6 +62,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         permissionManager = MetaPermissionManager(this)
+        audioRouteManager = BluetoothAudioRouteManager(this)
 
         // 1. Initialize Inputs and Repositories
         val inputSource = PhoneTextInputSource()
@@ -112,6 +115,13 @@ class MainActivity : ComponentActivity() {
             }
         }
         
+        lifecycleScope.launch {
+            audioRouteManager.status.collect { status ->
+                Log.d("HermesBridge", "Audio Route Status Update: $status")
+                viewModel.updateAudioRouteStatus(status)
+            }
+        }
+        
         // Command listener for UI actions
         lifecycleScope.launch {
             viewModel.commands.collect { command ->
@@ -151,6 +161,16 @@ class MainActivity : ComponentActivity() {
                         viewModel.updateMetaDatMessage("Inspecting Audio API...")
                         metaDatManager.discoverAudioApi()
                     }
+                    is UiCommand.StartBluetoothAudioRoute -> {
+                        if (metaDatManager.hasUsableSession()) {
+                            audioRouteManager.startBluetoothRoute()
+                        } else {
+                            viewModel.updateMetaDatMessage("Active session required for audio routing.")
+                        }
+                    }
+                    is UiCommand.StopBluetoothAudioRoute -> {
+                        audioRouteManager.stopBluetoothRoute()
+                    }
                 }
             }
         }
@@ -180,6 +200,9 @@ class MainActivity : ComponentActivity() {
         if (::metaDatManager.isInitialized) {
             metaDatManager.refreshStatus()
         }
+        if (::audioRouteManager.isInitialized) {
+            audioRouteManager.refreshRouteStatus()
+        }
         if (::permissionManager.isInitialized) {
             val state = permissionManager.checkPermissionState()
             val msg = when (state) {
@@ -206,6 +229,9 @@ class MainActivity : ComponentActivity() {
         // Release hardware synthesis bindings
         if (::metaDatManager.isInitialized) {
             metaDatManager.closeDeviceSession()
+        }
+        if (::audioRouteManager.isInitialized) {
+            audioRouteManager.stopBluetoothRoute()
         }
         speechOutput?.shutdown()
     }
