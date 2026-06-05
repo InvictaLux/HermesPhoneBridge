@@ -10,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import com.example.hermesbridge.bridge.MetaWearableInputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatManager
 import com.example.hermesbridge.meta.MetaDatStatus
@@ -20,6 +21,7 @@ import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -31,6 +33,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var audioRouteManager: BluetoothAudioRouteManager
     private lateinit var pcmCaptureManager: PcmCaptureManager
     private lateinit var speechToText: AndroidSpeechRecognizerInput
+    private lateinit var wearableInputSource: MetaWearableInputSource
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -73,11 +76,10 @@ class MainActivity : ComponentActivity() {
         speechToText = AndroidSpeechRecognizerInput(this) {
             audioRouteManager.isRoutingToBluetooth() 
         }
+        wearableInputSource = MetaWearableInputSource()
 
         // 1. Initialize Inputs and Repositories
-        val inputSource = PhoneTextInputSource()
-        // Future Gate 6:
-        // val inputSource = MetaWearableInputSource()
+        val phoneInputSource = PhoneTextInputSource()
         val api = OkHttpAgentApi()
         val repository = AgentRepository(api)
 
@@ -85,9 +87,15 @@ class MainActivity : ComponentActivity() {
         val factory = AgentViewModelFactory(
             application = this.application,
             repository = repository,
-            inputSource = inputSource
+            inputSource = phoneInputSource // Phone text remains primary for this ViewModel instance
         )
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
+
+        // Connect wearable input source to the ViewModel logic via a bridge method
+        wearableInputSource.setListener { event ->
+            viewModel.submitExternalBridgeEvent(event)
+        }
+        wearableInputSource.start()
 
         // 3. Initialize Android's standard TTS response output player on the UI thread
         speechOutput = AndroidTtsSpeechOutput(this) { success ->
@@ -152,8 +160,16 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Gate 9F: Integration of final wearable transcript
         lifecycleScope.launch {
-            speechToText.result.collect { result ->
+            combine(speechToText.result, viewModel.uiState) { result, state ->
+                result to state.isLoading
+            }.collect { (result, isLoading) ->
+                if (result.isFinal && result.finalTranscript.isNotBlank() && !isLoading) {
+                    Log.i("HermesBridge", "Routing wearable transcript to Hermes: ${result.finalTranscript}")
+                    viewModel.updateMetaDatMessage("Sending wearable transcript to Hermes...")
+                    wearableInputSource.submitTranscript(result.finalTranscript, result.confidence)
+                }
                 viewModel.updateSpeechResult(result)
             }
         }
@@ -283,6 +299,7 @@ class MainActivity : ComponentActivity() {
         }
         if (::speechToText.isInitialized) {
             speechToText.destroy()
+            wearableInputSource.stop()
         }
         speechOutput?.shutdown()
     }

@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.hermesbridge.bridge.BridgeEvent as InputBridgeEvent
 import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatStatus
@@ -274,24 +275,13 @@ class AgentViewModel(
         }
     }
 
-    // Dispatches TTS stop signal
-    fun stopSpeaking() {
-        speechOutput?.stop()
-        _uiState.update { it.copy(isTtsSpeaking = false) }
-    }
-
-    fun updateBatteryState(level: Int, isCharging: Boolean) {
-        _uiState.update {
-            it.copy(
-                batteryLevel = level,
-                isBatteryCharging = isCharging
-            )
-        }
-    }
-
     // Resets event history
     fun clearEvents() {
         _uiState.update { it.copy(events = emptyList()) }
+    }
+
+    fun submitExternalBridgeEvent(event: InputBridgeEvent) {
+        sendTextToBackend(event.text, event.source)
     }
 
     // Pipeline: Receives input, constructs API POST, handles feedback
@@ -317,7 +307,7 @@ class AgentViewModel(
                 timestamp = timestampIso,
                 metadata = AgentMetadata(
                     source = source,
-                    wearable = if (source == "wearable_meta") "meta_glasses" else "none"
+                    wearable = if (source == "meta_wearable_voice") "meta_glasses" else "none"
                 )
             )
 
@@ -380,6 +370,21 @@ class AgentViewModel(
         val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())
         sdf.timeZone = TimeZone.getTimeZone("UTC")
         return sdf.format(Date())
+    }
+
+    // Dispatches TTS stop signal
+    fun stopSpeaking() {
+        speechOutput?.stop()
+        _uiState.update { it.copy(isTtsSpeaking = false) }
+    }
+
+    fun updateBatteryState(level: Int, isCharging: Boolean) {
+        _uiState.update {
+            it.copy(
+                batteryLevel = level,
+                isBatteryCharging = isCharging
+            )
+        }
     }
 
     override fun onCleared() {
