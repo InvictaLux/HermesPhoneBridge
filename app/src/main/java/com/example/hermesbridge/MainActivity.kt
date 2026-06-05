@@ -16,6 +16,7 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.permissions.MetaPermissionManager
 import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
+import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import kotlinx.coroutines.launch
 
@@ -26,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var metaDatManager: MetaDatManager
     private lateinit var permissionManager: MetaPermissionManager
     private lateinit var audioRouteManager: BluetoothAudioRouteManager
+    private lateinit var pcmCaptureManager: PcmCaptureManager
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -62,7 +64,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         permissionManager = MetaPermissionManager(this)
+        val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
         audioRouteManager = BluetoothAudioRouteManager(this)
+        pcmCaptureManager = PcmCaptureManager(this, audioManager)
 
         // 1. Initialize Inputs and Repositories
         val inputSource = PhoneTextInputSource()
@@ -121,6 +125,19 @@ class MainActivity : ComponentActivity() {
                 viewModel.updateAudioRouteStatus(status)
             }
         }
+
+        lifecycleScope.launch {
+            pcmCaptureManager.status.collect { status ->
+                Log.d("HermesBridge", "PCM Capture Status Update: $status")
+                viewModel.updatePcmCaptureStatus(status)
+            }
+        }
+
+        lifecycleScope.launch {
+            pcmCaptureManager.result.collect { result ->
+                viewModel.updatePcmCaptureResult(result)
+            }
+        }
         
         // Command listener for UI actions
         lifecycleScope.launch {
@@ -170,6 +187,9 @@ class MainActivity : ComponentActivity() {
                     }
                     is UiCommand.StopBluetoothAudioRoute -> {
                         audioRouteManager.stopBluetoothRoute()
+                    }
+                    is UiCommand.CapturePcmSample -> {
+                        pcmCaptureManager.startCapture()
                     }
                 }
             }
@@ -232,6 +252,9 @@ class MainActivity : ComponentActivity() {
         }
         if (::audioRouteManager.isInitialized) {
             audioRouteManager.stopBluetoothRoute()
+        }
+        if (::pcmCaptureManager.isInitialized) {
+            pcmCaptureManager.stopCapture()
         }
         speechOutput?.shutdown()
     }

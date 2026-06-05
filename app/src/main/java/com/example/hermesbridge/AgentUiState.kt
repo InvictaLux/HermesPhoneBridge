@@ -4,6 +4,8 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.meta.MetaCapabilityStatus
 import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
+import com.example.hermesbridge.audio.PcmCaptureStatus
+import com.example.hermesbridge.audio.PcmCaptureResult
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -26,5 +28,7 @@ data class AgentUiState(
     val permissionMessage: String? = null,
     val metaCapabilities: MetaCapabilityStatus = MetaCapabilityStatus(),
     val metaAudioInfo: MetaAudioCapabilityInfo = MetaAudioCapabilityInfo(),
-    val audioRouteStatus: BluetoothAudioRouteStatus = BluetoothAudioRouteStatus.Idle
+    val audioRouteStatus: BluetoothAudioRouteStatus = BluetoothAudioRouteStatus.Idle,
+    val pcmCaptureStatus: PcmCaptureStatus = PcmCaptureStatus.Idle,
+    val pcmCaptureResult: PcmCaptureResult = PcmCaptureResult()
 )

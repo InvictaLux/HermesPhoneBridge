@@ -10,6 +10,8 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.meta.MetaCapabilityStatus
 import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
+import com.example.hermesbridge.audio.PcmCaptureStatus
+import com.example.hermesbridge.audio.PcmCaptureResult
 import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -35,6 +37,7 @@ sealed class UiCommand {
     object DiscoverMetaAudioApi : UiCommand()
     object StartBluetoothAudioRoute : UiCommand()
     object StopBluetoothAudioRoute : UiCommand()
+    object CapturePcmSample : UiCommand()
 }
 
 class AgentViewModel(
@@ -137,6 +140,14 @@ class AgentViewModel(
         _uiState.update { it.copy(metaAudioInfo = audioInfo) }
     }
 
+    fun updatePcmCaptureStatus(status: PcmCaptureStatus) {
+        _uiState.update { it.copy(pcmCaptureStatus = status) }
+    }
+
+    fun updatePcmCaptureResult(result: PcmCaptureResult) {
+        _uiState.update { it.copy(pcmCaptureResult = result) }
+    }
+
     fun updateAudioRouteStatus(status: BluetoothAudioRouteStatus) {
         _uiState.update { it.copy(audioRouteStatus = status) }
     }
@@ -198,6 +209,12 @@ class AgentViewModel(
     fun onStopAudioRouteClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.StopBluetoothAudioRoute)
+        }
+    }
+
+    fun onCapturePcmSampleClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.CapturePcmSample)
         }
     }
 

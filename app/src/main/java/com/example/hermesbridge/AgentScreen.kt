@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
+import com.example.hermesbridge.audio.PcmCaptureStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -187,6 +188,43 @@ fun AgentScreen(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.tertiary
             )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.onCapturePcmSampleClicked() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.audioRouteStatus is BluetoothAudioRouteStatus.Routed && 
+                          state.pcmCaptureStatus !is PcmCaptureStatus.Recording
+            ) {
+                Text("Capture 3-Second Mic Sample")
+            }
+
+            Text(
+                text = state.pcmCaptureStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+
+            if (state.pcmCaptureResult.samplesCaptured > 0 || state.pcmCaptureResult.error != null) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "PCM Capture Metrics",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            text = state.pcmCaptureResult.toDisplayString(),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                        )
+                    }
+                }
+            }
         }
 
         OutlinedTextField(
