@@ -133,6 +133,21 @@ fun AgentScreen(
             ) {
                 Text("Close Meta Session")
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.onDiscoverCapabilitiesClicked() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Discover Meta Capabilities")
+            }
+
+            Text(
+                text = "Capabilities:\n${state.metaCapabilities.toDisplayString()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
         }
 
         OutlinedTextField(

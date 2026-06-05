@@ -101,6 +101,11 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            metaDatManager.capabilities.collect { caps ->
+                viewModel.updateMetaCapabilities(caps)
+            }
+        }
         
         // Command listener for UI actions (Gate 7D, 8A, 8B)
         lifecycleScope.launch {
@@ -132,6 +137,10 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.RefreshMetaSession -> {
                         viewModel.updateMetaDatMessage("Refreshing health...")
                         metaDatManager.refreshSessionHealth()
+                    }
+                    is UiCommand.DiscoverMetaCapabilities -> {
+                        viewModel.updateMetaDatMessage("Discovering capabilities...")
+                        metaDatManager.discoverCapabilities()
                     }
                 }
             }

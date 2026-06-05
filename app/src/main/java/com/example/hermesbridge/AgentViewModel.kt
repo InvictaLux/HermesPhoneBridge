@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatStatus
+import com.example.hermesbridge.meta.MetaCapabilityStatus
 import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,6 +29,7 @@ sealed class UiCommand {
     object CloseMetaSession : UiCommand()
     object ReconnectMetaSession : UiCommand()
     object RefreshMetaSession : UiCommand()
+    object DiscoverMetaCapabilities : UiCommand()
 }
 
 class AgentViewModel(
@@ -118,6 +120,10 @@ class AgentViewModel(
         _uiState.update { it.copy(metaDatMessage = message) }
     }
 
+    fun updateMetaCapabilities(capabilities: MetaCapabilityStatus) {
+        _uiState.update { it.copy(metaCapabilities = capabilities) }
+    }
+
     fun updatePermissionMessage(message: String?) {
         _uiState.update { it.copy(permissionMessage = message) }
     }
@@ -155,6 +161,12 @@ class AgentViewModel(
     fun onRefreshSessionClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.RefreshMetaSession)
+        }
+    }
+
+    fun onDiscoverCapabilitiesClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.DiscoverMetaCapabilities)
         }
     }
 

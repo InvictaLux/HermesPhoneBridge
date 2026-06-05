@@ -1,6 +1,7 @@
 package com.example.hermesbridge
 
 import com.example.hermesbridge.meta.MetaDatStatus
+import com.example.hermesbridge.meta.MetaCapabilityStatus
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -20,5 +21,6 @@ data class AgentUiState(
     val isBatteryCharging: Boolean = false,
     val metaDatStatus: MetaDatStatus = MetaDatStatus.NotInitialized,
     val metaDatMessage: String? = null,
-    val permissionMessage: String? = null
+    val permissionMessage: String? = null,
+    val metaCapabilities: MetaCapabilityStatus = MetaCapabilityStatus()
 )

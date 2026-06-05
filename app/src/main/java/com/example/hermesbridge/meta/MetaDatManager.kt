@@ -8,6 +8,7 @@ import com.meta.wearable.dat.core.selectors.AutoDeviceSelector
 import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.DeviceSessionError
+import com.meta.wearable.dat.core.types.Permission
 import com.meta.wearable.dat.core.types.RegistrationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,6 +21,9 @@ import kotlinx.coroutines.launch
 class MetaDatManager(private val context: Context) {
     private val _status = MutableStateFlow<MetaDatStatus>(MetaDatStatus.NotInitialized)
     val status: StateFlow<MetaDatStatus> = _status.asStateFlow()
+
+    private val _capabilities = MutableStateFlow(MetaCapabilityStatus())
+    val capabilities: StateFlow<MetaCapabilityStatus> = _capabilities.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.Main)
     
@@ -67,7 +71,6 @@ class MetaDatManager(private val context: Context) {
 
     private fun updateStatusFromState(state: RegistrationState) {
         val current = _status.value
-        // If we are already in a session state, handle registration loss
         if (isSessionState(current)) {
             if (state != RegistrationState.REGISTERED) {
                 Log.w("HermesBridge", "Lost registration while in session.")
@@ -118,9 +121,6 @@ class MetaDatManager(private val context: Context) {
         }
     }
 
-    /**
-     * Reconnect logic: Close existing session if it's dead, then create a new one.
-     */
     fun reconnectDeviceSession() {
         Log.d("HermesBridge", "Reconnect requested.")
         if (currentSession != null) {
@@ -129,9 +129,6 @@ class MetaDatManager(private val context: Context) {
         createDeviceSession()
     }
 
-    /**
-     * Refresh health based on current session reference.
-     */
     fun refreshSessionHealth() {
         val session = currentSession
         if (session == null) {
@@ -148,9 +145,6 @@ class MetaDatManager(private val context: Context) {
         }
     }
 
-    /**
-     * Acquisition of a device session and starting it. (Gate 8C/8D)
-     */
     fun createDeviceSession() {
         if (Wearables.registrationState.value != RegistrationState.REGISTERED) {
             Log.w("HermesBridge", "Cannot create session: Registration not ready.")
@@ -159,7 +153,7 @@ class MetaDatManager(private val context: Context) {
         }
 
         if (currentSession != null) {
-            Log.i("HermesBridge", "Session already exists. Use reconnect or refresh instead.")
+            Log.i("HermesBridge", "Session already exists.")
             return
         }
 
@@ -190,7 +184,7 @@ class MetaDatManager(private val context: Context) {
                         }
                     }
 
-                    // Observe session errors (Gate 8D)
+                    // Observe session errors
                     sessionErrorJob?.cancel()
                     sessionErrorJob = scope.launch {
                         session.errors.collect { error ->
@@ -199,7 +193,6 @@ class MetaDatManager(private val context: Context) {
                         }
                     }
 
-                    // Start the session (connection handshake)
                     session.start()
                 },
                 onFailure = { error, _ ->
@@ -248,7 +241,6 @@ class MetaDatManager(private val context: Context) {
             sessionErrorJob?.cancel()
             sessionErrorJob = null
             
-            // Clean state transition
             if (_status.value !is MetaDatStatus.Ready && !isRegistrationState(_status.value)) {
                 _status.value = MetaDatStatus.SessionStopped
             }
@@ -265,5 +257,43 @@ class MetaDatManager(private val context: Context) {
     fun hasUsableSession(): Boolean {
         val session = currentSession ?: return false
         return session.state.value == DeviceSessionState.STARTED
+    }
+
+    /**
+     * Discovers and reports wearable capabilities. (Gate 9A)
+     */
+    fun discoverCapabilities() {
+        val session = currentSession
+        if (session == null) {
+            _capabilities.value = MetaCapabilityStatus(error = "No active session")
+            return
+        }
+
+        Log.d("HermesBridge", "Discovering Meta capabilities...")
+
+        scope.launch {
+            try {
+                // Find first discovered device as proxy for session info if session.device is internal
+                val deviceId = Wearables.devices.value.firstOrNull()
+                val metadataFlow = deviceId?.let { Wearables.devicesMetadata[it] }
+                val device = metadataFlow?.value
+
+                val cameraPerm = Wearables.checkPermissionStatus(Permission.CAMERA)
+                val micPerm = Wearables.checkPermissionStatus(Permission.MICROPHONE)
+
+                _capabilities.value = MetaCapabilityStatus(
+                    cameraAvailable = device != null,
+                    photoAvailable = device != null,
+                    microphoneAvailable = device != null,
+                    audioAvailable = device != null,
+                    displayAvailable = device?.isDisplayCapable() ?: false,
+                    deviceInfoAvailable = device != null,
+                    rawSummary = "Model: ${device?.deviceType}, Firmware: ${device?.firmwareInfo}, Permissions: Cam=${cameraPerm.getOrNull()}, Mic=${micPerm.getOrNull()}"
+                )
+            } catch (e: Exception) {
+                Log.e("HermesBridge", "Failed to discover capabilities", e)
+                _capabilities.value = MetaCapabilityStatus(error = e.message ?: "Unknown error")
+            }
+        }
     }
 }
