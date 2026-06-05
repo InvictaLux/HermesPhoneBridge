@@ -19,6 +19,7 @@ import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
+import com.example.hermesbridge.trigger.MetaWearableTurnTrigger
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
@@ -36,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var speechToText: AndroidSpeechRecognizerInput
     private lateinit var wearableInputSource: MetaWearableInputSource
     private lateinit var turnCoordinator: ConversationTurnCoordinator
+    private lateinit var turnTrigger: MetaWearableTurnTrigger
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -79,6 +81,8 @@ class MainActivity : ComponentActivity() {
             audioRouteManager.isRoutingToBluetooth() 
         }
         wearableInputSource = MetaWearableInputSource()
+        metaDatManager = MetaDatManager(this)
+        turnTrigger = MetaWearableTurnTrigger()
 
         // 1. Initialize Inputs and Repositories
         val phoneInputSource = PhoneTextInputSource()
@@ -89,11 +93,10 @@ class MainActivity : ComponentActivity() {
         val factory = AgentViewModelFactory(
             application = this.application,
             repository = repository,
-            inputSource = phoneInputSource // Phone text remains primary for this ViewModel instance
+            inputSource = phoneInputSource
         )
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
 
-        metaDatManager = MetaDatManager(this)
         turnCoordinator = ConversationTurnCoordinator(
             lifecycleScope,
             viewModel,
@@ -103,7 +106,7 @@ class MainActivity : ComponentActivity() {
             wearableInputSource
         )
 
-        // Connect wearable input source to the ViewModel logic via a bridge method
+        // Connect wearable input source to the ViewModel logic
         wearableInputSource.setListener { event ->
             viewModel.submitExternalBridgeEvent(event)
         }
@@ -119,14 +122,11 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // 4. Meta DAT Initialization Status Only (Gate 7C)
-        metaDatManager = turnCoordinator.metaDatManager
+        // 4. Status Observers
         lifecycleScope.launch {
             metaDatManager.status.collect { status ->
                 Log.d("HermesBridge", "Meta DAT Status Update: $status")
                 viewModel.updateMetaDatStatus(status)
-                
-                // Guidance messaging (Gate 7F)
                 if (status is MetaDatStatus.MissingMetaApp) {
                     viewModel.updateMetaDatMessage("Install or open the Meta AI companion app, then return here.")
                 } else if (status is MetaDatStatus.Ready) {
@@ -144,44 +144,40 @@ class MainActivity : ComponentActivity() {
                 viewModel.updateMetaAudioInfo(audio)
             }
         }
-        
         lifecycleScope.launch {
             audioRouteManager.status.collect { status ->
                 Log.d("HermesBridge", "Audio Route Status Update: $status")
                 viewModel.updateAudioRouteStatus(status)
             }
         }
-
         lifecycleScope.launch {
             pcmCaptureManager.status.collect { status ->
-                Log.d("HermesBridge", "PCM Capture Status Update: $status")
                 viewModel.updatePcmCaptureStatus(status)
             }
         }
-
         lifecycleScope.launch {
             pcmCaptureManager.result.collect { result ->
                 viewModel.updatePcmCaptureResult(result)
             }
         }
-
         lifecycleScope.launch {
             speechToText.status.collect { status ->
-                Log.d("HermesBridge", "Speech Status Update: $status")
                 viewModel.updateSpeechStatus(status)
             }
         }
-
         lifecycleScope.launch {
             speechToText.result.collect { result ->
                 viewModel.updateSpeechResult(result)
             }
         }
-
         lifecycleScope.launch {
             turnCoordinator.turnState.collect { status ->
-                Log.d("HermesBridge", "Turn State Update: $status")
                 viewModel.updateConversationTurnState(status)
+            }
+        }
+        lifecycleScope.launch {
+            turnTrigger.status.collect { status ->
+                viewModel.updateTriggerStatus(status)
             }
         }
         
@@ -249,8 +245,15 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+
+        // Hardware trigger subscription (Gate 10C)
+        turnTrigger.setListener { event ->
+            Log.d("HermesBridge", "Hardware trigger: ${event.type}")
+            turnCoordinator.startWearableTurn()
+        }
         
         metaDatManager.initialize()
+        turnTrigger.start()
 
         // Register battery status receiver
         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
@@ -313,8 +316,11 @@ class MainActivity : ComponentActivity() {
         }
         if (::speechToText.isInitialized) {
             speechToText.destroy()
-            wearableInputSource.stop()
         }
+        if (::turnTrigger.isInitialized) {
+            turnTrigger.stop()
+        }
+        wearableInputSource.stop()
         speechOutput?.shutdown()
     }
 }

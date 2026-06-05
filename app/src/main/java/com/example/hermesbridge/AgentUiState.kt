@@ -10,6 +10,7 @@ import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
 import com.example.hermesbridge.conversation.ConversationTurn
 import com.example.hermesbridge.conversation.ConversationTurnState
+import com.example.hermesbridge.trigger.WearableTriggerStatus
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -39,5 +40,6 @@ data class AgentUiState(
     val speechResult: SpeechRecognitionResult = SpeechRecognitionResult(),
     val turnState: ConversationTurnState = ConversationTurnState.Idle,
     val conversationHistory: List<ConversationTurn> = emptyList(),
-    val currentTurnId: String? = null
+    val currentTurnId: String? = null,
+    val triggerStatus: WearableTriggerStatus = WearableTriggerStatus.Idle
 )

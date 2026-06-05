@@ -17,6 +17,7 @@ import com.example.hermesbridge.audio.PcmCaptureResult
 import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
+import com.example.hermesbridge.trigger.WearableTriggerStatus
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -82,12 +83,11 @@ class AgentViewModel(
             defaultId
         }
 
-        // Initialize Session ID (Gate 10B)
+        // Initialize Session ID
         startNewSession(savedApiUrl, savedDeviceId)
 
         // Connect the InputSource text emissions to the transmission pipeline
         inputSource.setListener { event ->
-            // Manual phone text usually comes through here
             val source = if (event.source == "phone_text") ConversationTurnSource.PhoneText else ConversationTurnSource.MetaWearableVoice
             submitNewTurn(event.text, source)
         }
@@ -112,7 +112,6 @@ class AgentViewModel(
                 inputSourceType = if (inputSource is PhoneTextInputSource) "phone_text" else "unknown"
             )
         }
-        Log.i("HermesSession", "Started new session: $newSessionId")
     }
 
     // Configures the voice output engine (AndroidTtsSpeechOutput)
@@ -164,6 +163,10 @@ class AgentViewModel(
 
     fun updateConversationTurnState(status: ConversationTurnState) {
         _uiState.update { it.copy(turnState = status) }
+    }
+
+    fun updateTriggerStatus(status: WearableTriggerStatus) {
+        _uiState.update { it.copy(triggerStatus = status) }
     }
 
     fun onRegisterMetaDatClicked() {
@@ -269,12 +272,9 @@ class AgentViewModel(
         sharedPrefs.edit().putString(AppConfig.KEY_SESSION_ID, newSessionId).apply()
     }
 
-    // Submits on-screen text to the active InputSource
     fun submitScreenInput() {
         val textToSubmit = _uiState.value.inputText.trim()
         if (textToSubmit.isEmpty()) return
-
-        // Clear input text field straight away
         _uiState.update { it.copy(inputText = "") }
 
         if (inputSource is PhoneTextInputSource) {
@@ -282,7 +282,6 @@ class AgentViewModel(
         }
     }
 
-    // Resets event history
     fun clearEvents() {
         _uiState.update { it.copy(events = emptyList()) }
     }
@@ -293,10 +292,7 @@ class AgentViewModel(
     }
 
     private fun submitNewTurn(text: String, source: ConversationTurnSource) {
-        if (_uiState.value.isLoading) {
-            Log.w("HermesTurn", "Ignoring input while loading.")
-            return
-        }
+        if (_uiState.value.isLoading) return
 
         val turnId = UUID.randomUUID().toString()
         val createdAt = getIsoTimestamp()
@@ -322,20 +318,16 @@ class AgentViewModel(
 
     fun retryTurn(turn: ConversationTurn) {
         if (_uiState.value.isLoading) return
-        Log.i("HermesTurn", "Retrying turn: ${turn.turnId}")
         submitNewTurn(turn.inputText, turn.source)
     }
 
-    // Pipeline: Receives input, constructs API POST, handles feedback
     private fun sendTextToBackend(rawText: String, turnId: String, source: ConversationTurnSource) {
         viewModelScope.launch {
             val currentState = _uiState.value
             val timestampIso = getIsoTimestamp()
 
-            // 1. Post local input event
             addEvent(LogEvent.TextInput(text = rawText))
 
-            // 2. Mark loading and update turn status
             _uiState.update { state ->
                 state.copy(
                     isLoading = true,
@@ -347,7 +339,6 @@ class AgentViewModel(
             }
             addEvent(LogEvent.NetworkRequestSent(url = currentState.apiUrl))
 
-            // 3. Assemble JSON Payload
             val requestPayload = AgentRequest(
                 deviceId = currentState.deviceId,
                 sessionId = currentState.sessionId,
@@ -362,20 +353,14 @@ class AgentViewModel(
                 )
             )
 
-            // 4. Perform Network Request
             val response = repository.sendMessage(currentState.apiUrl, requestPayload)
 
-            // Stale response protection
-            if (_uiState.value.currentTurnId != turnId) {
-                Log.w("HermesTurn", "Ignoring stale response for turn $turnId. Current turn is ${_uiState.value.currentTurnId}")
-                return@launch
-            }
+            if (_uiState.value.currentTurnId != turnId) return@launch
 
             _uiState.update { it.copy(isLoading = false) }
 
             if (response.error == null) {
                 val textToSpeak = response.finalResponseText
-
                 _uiState.update { state ->
                     state.copy(
                         latestResponse = textToSpeak,
@@ -390,13 +375,8 @@ class AgentViewModel(
                         }
                     )
                 }
-
-                // Log response receipt
                 addEvent(LogEvent.NetworkResponseReceived(responseText = textToSpeak))
-
-                // 5. Trigger Speech synthesis
                 speakResponse(textToSpeak)
-
             } else {
                 val errorDetails = response.error ?: "Communication Failure"
                 _uiState.update { state ->
@@ -419,7 +399,7 @@ class AgentViewModel(
 
     private fun addEvent(event: LogEvent) {
         _uiState.update {
-            it.copy(events = listOf(event) + it.events) // Prepend for live logging stream
+            it.copy(events = listOf(event) + it.events)
         }
     }
 
@@ -429,7 +409,6 @@ class AgentViewModel(
         return sdf.format(Date())
     }
 
-    // Dispatches TTS stop signal
     fun stopSpeaking() {
         speechOutput?.stop()
         _uiState.update { it.copy(isTtsSpeaking = false) }

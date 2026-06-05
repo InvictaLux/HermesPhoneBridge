@@ -246,6 +246,12 @@ fun AgentScreen(
                 color = MaterialTheme.colorScheme.primary
             )
 
+            Text(
+                text = state.triggerStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
                     onClick = { viewModel.onStartWearableSpeechTestClicked() },
