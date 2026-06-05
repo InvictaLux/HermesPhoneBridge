@@ -9,6 +9,7 @@ import com.meta.wearable.dat.core.session.DeviceSession
 import com.meta.wearable.dat.core.session.DeviceSessionState
 import com.meta.wearable.dat.core.types.DeviceSessionError
 import com.meta.wearable.dat.core.types.Permission
+import com.meta.wearable.dat.core.types.PermissionStatus
 import com.meta.wearable.dat.core.types.RegistrationState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,6 +25,9 @@ class MetaDatManager(private val context: Context) {
 
     private val _capabilities = MutableStateFlow(MetaCapabilityStatus())
     val capabilities: StateFlow<MetaCapabilityStatus> = _capabilities.asStateFlow()
+
+    private val _audioInfo = MutableStateFlow(MetaAudioCapabilityInfo())
+    val audioInfo: StateFlow<MetaAudioCapabilityInfo> = _audioInfo.asStateFlow()
 
     private val scope = CoroutineScope(Dispatchers.Main)
     
@@ -168,7 +172,6 @@ class MetaDatManager(private val context: Context) {
                     Log.i("HermesBridge", "Meta Device Session Acquired.")
                     currentSession = session
                     
-                    // Observe session state
                     sessionStateJob?.cancel()
                     sessionStateJob = scope.launch {
                         session.state.collect { sessionState ->
@@ -184,7 +187,6 @@ class MetaDatManager(private val context: Context) {
                         }
                     }
 
-                    // Observe session errors
                     sessionErrorJob?.cancel()
                     sessionErrorJob = scope.launch {
                         session.errors.collect { error ->
@@ -259,9 +261,6 @@ class MetaDatManager(private val context: Context) {
         return session.state.value == DeviceSessionState.STARTED
     }
 
-    /**
-     * Discovers and reports wearable capabilities. (Gate 9A)
-     */
     fun discoverCapabilities() {
         val session = currentSession
         if (session == null) {
@@ -273,7 +272,6 @@ class MetaDatManager(private val context: Context) {
 
         scope.launch {
             try {
-                // Find first discovered device as proxy for session info if session.device is internal
                 val deviceId = Wearables.devices.value.firstOrNull()
                 val metadataFlow = deviceId?.let { Wearables.devicesMetadata[it] }
                 val device = metadataFlow?.value
@@ -293,6 +291,40 @@ class MetaDatManager(private val context: Context) {
             } catch (e: Exception) {
                 Log.e("HermesBridge", "Failed to discover capabilities", e)
                 _capabilities.value = MetaCapabilityStatus(error = e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    /**
+     * Inspects and reports the Meta Audio API. (Gate 9B)
+     */
+    fun discoverAudioApi() {
+        if (currentSession == null) {
+            _audioInfo.value = MetaAudioCapabilityInfo(error = "No active session")
+            return
+        }
+
+        Log.d("HermesBridge", "Inspecting Meta Audio API...")
+
+        scope.launch {
+            try {
+                val micPerm = Wearables.checkPermissionStatus(Permission.MICROPHONE)
+                val status = when (val result = micPerm.getOrNull()) {
+                    PermissionStatus.Granted -> "granted"
+                    PermissionStatus.Denied -> "denied"
+                    null -> "unknown"
+                }
+
+                _audioInfo.value = MetaAudioCapabilityInfo(
+                    apiAvailable = false, // As per discovery, handled by Android platform
+                    platformApiRequired = true,
+                    permissionRequired = true,
+                    permissionStatus = status,
+                    notes = "SDK coordination required for HFP/SCO routing. 8kHz PCM mono supported."
+                )
+            } catch (e: Exception) {
+                Log.e("HermesBridge", "Failed to discover audio API", e)
+                _audioInfo.value = MetaAudioCapabilityInfo(error = e.message ?: "Unknown error")
             }
         }
     }

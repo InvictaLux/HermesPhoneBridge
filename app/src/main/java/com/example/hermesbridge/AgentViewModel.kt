@@ -8,6 +8,7 @@ import com.example.hermesbridge.bridge.InputSource
 import com.example.hermesbridge.bridge.PhoneTextInputSource
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.meta.MetaCapabilityStatus
+import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.speech.SpeechOutput
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ sealed class UiCommand {
     object ReconnectMetaSession : UiCommand()
     object RefreshMetaSession : UiCommand()
     object DiscoverMetaCapabilities : UiCommand()
+    object DiscoverMetaAudioApi : UiCommand()
 }
 
 class AgentViewModel(
@@ -120,12 +122,16 @@ class AgentViewModel(
         _uiState.update { it.copy(metaDatMessage = message) }
     }
 
+    fun updatePermissionMessage(message: String?) {
+        _uiState.update { it.copy(permissionMessage = message) }
+    }
+
     fun updateMetaCapabilities(capabilities: MetaCapabilityStatus) {
         _uiState.update { it.copy(metaCapabilities = capabilities) }
     }
 
-    fun updatePermissionMessage(message: String?) {
-        _uiState.update { it.copy(permissionMessage = message) }
+    fun updateMetaAudioInfo(audioInfo: MetaAudioCapabilityInfo) {
+        _uiState.update { it.copy(metaAudioInfo = audioInfo) }
     }
 
     fun onRegisterMetaDatClicked() {
@@ -167,6 +173,12 @@ class AgentViewModel(
     fun onDiscoverCapabilitiesClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.DiscoverMetaCapabilities)
+        }
+    }
+
+    fun onInspectAudioApiClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.DiscoverMetaAudioApi)
         }
     }
 

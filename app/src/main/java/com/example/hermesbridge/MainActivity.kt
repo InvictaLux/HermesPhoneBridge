@@ -106,8 +106,13 @@ class MainActivity : ComponentActivity() {
                 viewModel.updateMetaCapabilities(caps)
             }
         }
+        lifecycleScope.launch {
+            metaDatManager.audioInfo.collect { audio ->
+                viewModel.updateMetaAudioInfo(audio)
+            }
+        }
         
-        // Command listener for UI actions (Gate 7D, 8A, 8B)
+        // Command listener for UI actions
         lifecycleScope.launch {
             viewModel.commands.collect { command ->
                 when (command) {
@@ -141,6 +146,10 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.DiscoverMetaCapabilities -> {
                         viewModel.updateMetaDatMessage("Discovering capabilities...")
                         metaDatManager.discoverCapabilities()
+                    }
+                    is UiCommand.DiscoverMetaAudioApi -> {
+                        viewModel.updateMetaDatMessage("Inspecting Audio API...")
+                        metaDatManager.discoverAudioApi()
                     }
                 }
             }

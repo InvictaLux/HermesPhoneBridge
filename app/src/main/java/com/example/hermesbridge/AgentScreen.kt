@@ -148,6 +148,19 @@ fun AgentScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.tertiary
             )
+
+            Button(
+                onClick = { viewModel.onInspectAudioApiClicked() },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Inspect Meta Audio API")
+            }
+
+            Text(
+                text = "Audio Info:\n${state.metaAudioInfo.toDisplayString()}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
 
         OutlinedTextField(
