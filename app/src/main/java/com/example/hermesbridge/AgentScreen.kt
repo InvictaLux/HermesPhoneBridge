@@ -25,6 +25,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
+import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -222,6 +223,57 @@ fun AgentScreen(
                             style = MaterialTheme.typography.bodySmall,
                             fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
                         )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.onStartWearableSpeechTestClicked() },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = state.audioRouteStatus is BluetoothAudioRouteStatus.Routed && 
+                          state.speechStatus !is SpeechRecognitionStatus.Listening
+            ) {
+                Text("Start Wearable Speech Test")
+            }
+
+            Text(
+                text = state.speechStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            if (state.speechResult.partialTranscript.isNotBlank() || state.speechResult.finalTranscript.isNotBlank()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "Wearable Transcript",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        if (state.speechResult.partialTranscript.isNotBlank()) {
+                            Text(
+                                text = "Partial: ${state.speechResult.partialTranscript}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.outline
+                            )
+                        }
+                        if (state.speechResult.finalTranscript.isNotBlank()) {
+                            Text(
+                                text = "Final: ${state.speechResult.finalTranscript}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                            )
+                            Text(
+                                text = "Confidence: ${"%.2f".format(state.speechResult.confidence)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        }
                     }
                 }
             }

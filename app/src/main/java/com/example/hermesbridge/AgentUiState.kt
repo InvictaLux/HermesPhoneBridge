@@ -6,6 +6,8 @@ import com.example.hermesbridge.meta.MetaAudioCapabilityInfo
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
+import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import com.example.hermesbridge.speech.SpeechRecognitionResult
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -30,5 +32,7 @@ data class AgentUiState(
     val metaAudioInfo: MetaAudioCapabilityInfo = MetaAudioCapabilityInfo(),
     val audioRouteStatus: BluetoothAudioRouteStatus = BluetoothAudioRouteStatus.Idle,
     val pcmCaptureStatus: PcmCaptureStatus = PcmCaptureStatus.Idle,
-    val pcmCaptureResult: PcmCaptureResult = PcmCaptureResult()
+    val pcmCaptureResult: PcmCaptureResult = PcmCaptureResult(),
+    val speechStatus: SpeechRecognitionStatus = SpeechRecognitionStatus.Idle,
+    val speechResult: SpeechRecognitionResult = SpeechRecognitionResult()
 )

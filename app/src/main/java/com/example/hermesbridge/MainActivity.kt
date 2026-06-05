@@ -17,7 +17,9 @@ import com.example.hermesbridge.permissions.MetaPermissionManager
 import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.audio.PcmCaptureManager
+import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
+import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -28,6 +30,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var permissionManager: MetaPermissionManager
     private lateinit var audioRouteManager: BluetoothAudioRouteManager
     private lateinit var pcmCaptureManager: PcmCaptureManager
+    private lateinit var speechToText: AndroidSpeechRecognizerInput
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -67,6 +70,9 @@ class MainActivity : ComponentActivity() {
         val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
         audioRouteManager = BluetoothAudioRouteManager(this)
         pcmCaptureManager = PcmCaptureManager(this, audioManager)
+        speechToText = AndroidSpeechRecognizerInput(this) {
+            audioRouteManager.isRoutingToBluetooth() 
+        }
 
         // 1. Initialize Inputs and Repositories
         val inputSource = PhoneTextInputSource()
@@ -138,6 +144,19 @@ class MainActivity : ComponentActivity() {
                 viewModel.updatePcmCaptureResult(result)
             }
         }
+
+        lifecycleScope.launch {
+            speechToText.status.collect { status ->
+                Log.d("HermesBridge", "Speech Status Update: $status")
+                viewModel.updateSpeechStatus(status)
+            }
+        }
+
+        lifecycleScope.launch {
+            speechToText.result.collect { result ->
+                viewModel.updateSpeechResult(result)
+            }
+        }
         
         // Command listener for UI actions
         lifecycleScope.launch {
@@ -190,6 +209,12 @@ class MainActivity : ComponentActivity() {
                     }
                     is UiCommand.CapturePcmSample -> {
                         pcmCaptureManager.startCapture()
+                    }
+                    is UiCommand.StartWearableSpeechTest -> {
+                        speechToText.startListening()
+                    }
+                    is UiCommand.StopWearableSpeechTest -> {
+                        speechToText.stopListening()
                     }
                 }
             }
@@ -255,6 +280,9 @@ class MainActivity : ComponentActivity() {
         }
         if (::pcmCaptureManager.isInitialized) {
             pcmCaptureManager.stopCapture()
+        }
+        if (::speechToText.isInitialized) {
+            speechToText.destroy()
         }
         speechOutput?.shutdown()
     }

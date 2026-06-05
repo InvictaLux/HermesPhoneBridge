@@ -100,4 +100,6 @@ class BluetoothAudioRouteManager(private val context: Context) {
             Log.d("HermesAudio", "Refreshing route status. Mode: ${audioManager.mode}")
         }
     }
+
+    fun isRoutingToBluetooth(): Boolean = isRoutingActive
 }

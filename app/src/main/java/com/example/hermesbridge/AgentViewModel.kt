@@ -13,6 +13,8 @@ import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.audio.PcmCaptureResult
 import com.example.hermesbridge.speech.SpeechOutput
+import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import com.example.hermesbridge.speech.SpeechRecognitionResult
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -38,6 +40,8 @@ sealed class UiCommand {
     object StartBluetoothAudioRoute : UiCommand()
     object StopBluetoothAudioRoute : UiCommand()
     object CapturePcmSample : UiCommand()
+    object StartWearableSpeechTest : UiCommand()
+    object StopWearableSpeechTest : UiCommand()
 }
 
 class AgentViewModel(
@@ -148,6 +152,14 @@ class AgentViewModel(
         _uiState.update { it.copy(pcmCaptureResult = result) }
     }
 
+    fun updateSpeechStatus(status: SpeechRecognitionStatus) {
+        _uiState.update { it.copy(speechStatus = status) }
+    }
+
+    fun updateSpeechResult(result: SpeechRecognitionResult) {
+        _uiState.update { it.copy(speechResult = result) }
+    }
+
     fun updateAudioRouteStatus(status: BluetoothAudioRouteStatus) {
         _uiState.update { it.copy(audioRouteStatus = status) }
     }
@@ -215,6 +227,18 @@ class AgentViewModel(
     fun onCapturePcmSampleClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.CapturePcmSample)
+        }
+    }
+
+    fun onStartWearableSpeechTestClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.StartWearableSpeechTest)
+        }
+    }
+
+    fun onStopWearableSpeechTestClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.StopWearableSpeechTest)
         }
     }
 
