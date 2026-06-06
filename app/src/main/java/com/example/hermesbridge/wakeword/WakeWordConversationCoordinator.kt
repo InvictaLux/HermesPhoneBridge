@@ -1,7 +1,7 @@
 package com.example.hermesbridge.wakeword
 
 import android.util.Log
-import com.example.hermesbridge.AgentViewModel
+import com.example.hermesbridge.BridgeController
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.metrics.InteractionMetricsCollector
@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.collectLatest
 
 class WakeWordConversationCoordinator(
     private val scope: CoroutineScope,
-    private val viewModel: AgentViewModel,
+    private val controller: BridgeController,
     private val wakeWordManager: WakeWordTestManager,
     private val turnCoordinator: ConversationTurnCoordinator,
     private val metricsCollector: InteractionMetricsCollector? = null
@@ -84,9 +84,9 @@ class WakeWordConversationCoordinator(
                 }
             }
 
-            // Monitor TTS speaking state (for manual turns)
+            // Monitor TTS speaking state (via controller)
             launch {
-                viewModel.uiState.collectLatest { state ->
+                controller.uiState.collectLatest { state ->
                     if (state.isTtsSpeaking) {
                         if (wakeWordManager.status.value is WakeWordStatus.Listening) {
                             Log.d("HermesWakeCoord", "TTS active, pausing wake detection.")

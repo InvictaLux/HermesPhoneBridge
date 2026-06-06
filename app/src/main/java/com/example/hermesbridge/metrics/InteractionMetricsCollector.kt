@@ -25,6 +25,34 @@ class InteractionMetricsCollector(private val context: Context) {
     private var listeningStartTime: Long = 0
     private var bluetoothRouteStartTime: Long = 0
     private var totalBluetoothActiveMs: Long = 0
+    private var serviceStartTime: Long = 0
+    private var screenOffStartTime: Long = 0
+
+    fun onServiceStarted() {
+        serviceStartTime = SystemClock.elapsedRealtime()
+    }
+
+    fun onServiceStopped() {
+        if (serviceStartTime > 0) {
+            val duration = SystemClock.elapsedRealtime() - serviceStartTime
+            _reliabilityStats.update { it.copy(serviceRuntimeMs = it.serviceRuntimeMs + duration) }
+            serviceStartTime = 0
+        }
+    }
+
+    fun onScreenOff() {
+        if (listeningStartTime > 0) {
+            screenOffStartTime = SystemClock.elapsedRealtime()
+        }
+    }
+
+    fun onScreenOn() {
+        if (screenOffStartTime > 0) {
+            val duration = SystemClock.elapsedRealtime() - screenOffStartTime
+            _reliabilityStats.update { it.copy(screenOffListeningMs = it.screenOffListeningMs + duration) }
+            screenOffStartTime = 0
+        }
+    }
 
     fun onWakeModeEnabled() {
         sessionStartTime = SystemClock.elapsedRealtime()
@@ -151,7 +179,9 @@ class InteractionMetricsCollector(private val context: Context) {
         sb.append("Listening Time: ${stats.totalListeningMs / 1000}s\n")
         sb.append("Detections: ${stats.detections}\n")
         sb.append("True: ${stats.trueDetections}, False: ${stats.falseDetections}, Missed: ${stats.missedDetections}\n")
-        sb.append("False/Hour: ${"%.2f".format(stats.getFalseDetectionsPerHour())}\n\n")
+        sb.append("False/Hour: ${"%.2f".format(stats.getFalseDetectionsPerHour())}\n")
+        sb.append("Service Runtime: ${stats.serviceRuntimeMs / 1000}s\n")
+        sb.append("Screen-off Listening: ${stats.screenOffListeningMs / 1000}s\n\n")
         
         sb.append("--- Latency (Last Turn) ---\n")
         sb.append("Wake Detection: ${lat.getWakeDetectionLatency()}ms\n")
