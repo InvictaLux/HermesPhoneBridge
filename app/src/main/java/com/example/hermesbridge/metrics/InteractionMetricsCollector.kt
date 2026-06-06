@@ -27,36 +27,14 @@ class InteractionMetricsCollector(private val context: Context) {
     private var totalBluetoothActiveMs: Long = 0
     private var serviceStartTime: Long = 0
     private var screenOffStartTime: Long = 0
-
-    fun onServiceStarted() {
-        serviceStartTime = SystemClock.elapsedRealtime()
-    }
-
-    fun onServiceStopped() {
-        if (serviceStartTime > 0) {
-            val duration = SystemClock.elapsedRealtime() - serviceStartTime
-            _reliabilityStats.update { it.copy(serviceRuntimeMs = it.serviceRuntimeMs + duration) }
-            serviceStartTime = 0
-        }
-    }
-
-    fun onScreenOff() {
-        if (listeningStartTime > 0) {
-            screenOffStartTime = SystemClock.elapsedRealtime()
-        }
-    }
-
-    fun onScreenOn() {
-        if (screenOffStartTime > 0) {
-            val duration = SystemClock.elapsedRealtime() - screenOffStartTime
-            _reliabilityStats.update { it.copy(screenOffListeningMs = it.screenOffListeningMs + duration) }
-            screenOffStartTime = 0
-        }
-    }
+    
+    private var startBatteryLevel: Int = -1
+    private var lastBatterySnapshot: BatterySnapshot? = null
 
     fun onWakeModeEnabled() {
         sessionStartTime = SystemClock.elapsedRealtime()
-        takeBatterySnapshot("WakeModeEnabled")
+        val snapshot = takeBatterySnapshot("WakeModeEnabled")
+        startBatteryLevel = snapshot.level
     }
 
     fun onWakeListeningStarted() {
@@ -74,10 +52,13 @@ class InteractionMetricsCollector(private val context: Context) {
 
     fun onWakeDetected(latencyMs: Long) {
         _reliabilityStats.update { it.copy(detections = it.detections + 1) }
-        _lastLatency.update { LatencyBreakdown().apply { 
-            wakeDetected = SystemClock.elapsedRealtime()
-            wakeDetectionStart = wakeDetected - latencyMs
-        }}
+        _lastLatency.update { 
+            it.recordDetection(latencyMs)
+            it.copy().apply { 
+                wakeDetected = SystemClock.elapsedRealtime()
+                wakeDetectionStart = wakeDetected - latencyMs
+            }
+        }
         takeBatterySnapshot("WakeDetected")
     }
 
@@ -89,22 +70,12 @@ class InteractionMetricsCollector(private val context: Context) {
         }
     }
 
-    fun onTrueDetection() {
-        _reliabilityStats.update { it.copy(trueDetections = it.trueDetections + 1) }
-    }
+    fun onTrueDetection() { _reliabilityStats.update { it.copy(trueDetections = it.trueDetections + 1) } }
+    fun onFalseDetection() { _reliabilityStats.update { it.copy(falseDetections = it.falseDetections + 1) } }
+    fun onMissedDetection() { _reliabilityStats.update { it.copy(missedDetections = it.missedDetections + 1) } }
+    fun onDeliberateAttempt() { _reliabilityStats.update { it.copy(deliberateWakeAttempts = it.deliberateWakeAttempts + 1) } }
 
-    fun onFalseDetection() {
-        _reliabilityStats.update { it.copy(falseDetections = it.falseDetections + 1) }
-    }
-
-    fun onMissedDetection() {
-        _reliabilityStats.update { it.copy(missedDetections = it.missedDetections + 1) }
-    }
-
-    fun onBluetoothRouteStarted() {
-        bluetoothRouteStartTime = SystemClock.elapsedRealtime()
-    }
-
+    fun onBluetoothRouteStarted() { bluetoothRouteStartTime = SystemClock.elapsedRealtime() }
     fun onBluetoothRouteStopped() {
         if (bluetoothRouteStartTime > 0) {
             totalBluetoothActiveMs += (SystemClock.elapsedRealtime() - bluetoothRouteStartTime)
@@ -115,33 +86,33 @@ class InteractionMetricsCollector(private val context: Context) {
     fun onRouteLoss() {
         _reliabilityStats.update { it.copy(routeLossCount = it.routeLossCount + 1, routeRecoveryCount = it.routeRecoveryCount + 1) }
     }
-
-    fun onSessionLoss() {
-        _reliabilityStats.update { it.copy(sessionRecoveryCount = it.sessionRecoveryCount + 1) }
+    fun onSessionLoss() { _reliabilityStats.update { it.copy(sessionRecoveryCount = it.sessionRecoveryCount + 1) } }
+    fun onLowBatteryPause() { _reliabilityStats.update { it.copy(lowBatteryPauses = it.lowBatteryPauses + 1, servicePauseCount = it.servicePauseCount + 1) } }
+    fun onThermalPause() { _reliabilityStats.update { it.copy(thermalPauses = it.thermalPauses + 1, servicePauseCount = it.servicePauseCount + 1) } }
+    fun onScreenOffLimitReached() { _reliabilityStats.update { it.copy(screenOffLimitReachedCount = it.screenOffLimitReachedCount + 1) } }
+    fun setStopReason(reason: String) { _reliabilityStats.update { it.copy(stopReason = reason) } }
+    fun onServiceStarted() { serviceStartTime = SystemClock.elapsedRealtime() }
+    fun onServiceStopped() {
+        if (serviceStartTime > 0) {
+            val duration = SystemClock.elapsedRealtime() - serviceStartTime
+            _reliabilityStats.update { it.copy(serviceRuntimeMs = it.serviceRuntimeMs + duration) }
+            serviceStartTime = 0
+        }
     }
-
-    fun onLowBatteryPause() {
-        _reliabilityStats.update { it.copy(lowBatteryPauses = it.lowBatteryPauses + 1, servicePauseCount = it.servicePauseCount + 1) }
-    }
-
-    fun onThermalPause() {
-        _reliabilityStats.update { it.copy(thermalPauses = it.thermalPauses + 1, servicePauseCount = it.servicePauseCount + 1) }
-    }
-
-    fun onScreenOffLimitReached() {
-        _reliabilityStats.update { it.copy(screenOffLimitReachedCount = it.screenOffLimitReachedCount + 1) }
-    }
-
-    fun setStopReason(reason: String) {
-        _reliabilityStats.update { it.copy(stopReason = reason) }
+    fun onScreenOff() { if (listeningStartTime > 0) screenOffStartTime = SystemClock.elapsedRealtime() }
+    fun onScreenOn() {
+        if (screenOffStartTime > 0) {
+            val duration = SystemClock.elapsedRealtime() - screenOffStartTime
+            _reliabilityStats.update { it.copy(screenOffListeningMs = it.screenOffListeningMs + duration) }
+            screenOffStartTime = 0
+        }
     }
 
     fun resetMetrics() {
         _reliabilityStats.value = WakeReliabilityStats()
         _lastLatency.value = LatencyBreakdown()
         totalBluetoothActiveMs = 0
-        if (listeningStartTime > 0) listeningStartTime = SystemClock.elapsedRealtime()
-        if (bluetoothRouteStartTime > 0) bluetoothRouteStartTime = SystemClock.elapsedRealtime()
+        startBatteryLevel = lastBatterySnapshot?.level ?: -1
     }
 
     fun takeBatterySnapshot(tag: String): BatterySnapshot {
@@ -149,16 +120,11 @@ class InteractionMetricsCollector(private val context: Context) {
         val level = intent?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
         val scale = intent?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
         val pct = if (scale > 0) (level * 100 / scale) else -1
-        
         val temp = (intent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
         val volt = intent?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0
         
         val current = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
-        } else null
-
-        val charge = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            batteryManager.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
         } else null
 
         val status = intent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
@@ -170,19 +136,23 @@ class InteractionMetricsCollector(private val context: Context) {
             temperature = temp,
             voltage = volt,
             currentNow = current,
-            chargeCounter = charge,
+            chargeCounter = null,
             isCharging = isCharging
         )
         
-        Log.i("HermesMetrics", "Battery Snapshot [$tag]: $pct%, $temp°C, ${current ?: "N/A"}uA")
+        lastBatterySnapshot = snapshot
+        _reliabilityStats.update { 
+            it.copy(
+                maxTemperature = if (temp > it.maxTemperature) temp else it.maxTemperature,
+                batteryChange = if (startBatteryLevel >= 0) startBatteryLevel - pct else 0
+            )
+        }
         return snapshot
     }
 
     fun getBluetoothUptimeMs(): Long {
         var active = totalBluetoothActiveMs
-        if (bluetoothRouteStartTime > 0) {
-            active += (SystemClock.elapsedRealtime() - bluetoothRouteStartTime)
-        }
+        if (bluetoothRouteStartTime > 0) active += (SystemClock.elapsedRealtime() - bluetoothRouteStartTime)
         return active
     }
 
@@ -190,35 +160,24 @@ class InteractionMetricsCollector(private val context: Context) {
         val stats = _reliabilityStats.value
         val lat = _lastLatency.value
         val sb = StringBuilder()
-        sb.append("Hermes Phone Bridge - Metrics Summary\n")
-        sb.append("====================================\n")
-        sb.append("Device: ${Build.MODEL} (Android ${Build.VERSION.RELEASE})\n")
-        sb.append("Date: ${java.util.Date()}\n\n")
+        sb.append("Hermes Bridge Tuning Summary\n")
+        sb.append("============================\n")
+        sb.append("Device: ${Build.MODEL}\n\n")
         
-        sb.append("--- Wake Word Stats ---\n")
-        sb.append("Listening Time: ${stats.totalListeningMs / 1000}s\n")
-        sb.append("Detections: ${stats.detections}\n")
-        sb.append("True: ${stats.trueDetections}, False: ${stats.falseDetections}, Missed: ${stats.missedDetections}\n")
-        sb.append("False/Hour: ${"%.2f".format(stats.getFalseDetectionsPerHour())}\n")
+        sb.append("--- Reliability ---\n")
+        sb.append("Attempts: ${stats.deliberateWakeAttempts}, Success: ${stats.trueDetections}, Missed: ${stats.missedDetections}\n")
+        sb.append("Recall: ${"%.2f".format(stats.getRecall())}, Precision: ${"%.2f".format(stats.getPrecision())}\n")
+        sb.append("False Detections: ${stats.falseDetections} (${"%.2f".format(stats.getFalseDetectionsPerHour())}/hr)\n")
         sb.append("Service Runtime: ${stats.serviceRuntimeMs / 1000}s\n")
         sb.append("Screen-off Listening: ${stats.screenOffListeningMs / 1000}s\n\n")
         
-        sb.append("--- Latency (Last Turn) ---\n")
-        sb.append("Wake Detection: ${lat.getWakeDetectionLatency()}ms\n")
-        sb.append("Wake to Listen: ${lat.getWakeToListenLatency()}ms\n")
-        sb.append("STT Final: ${lat.getSpeechStartToFinal()}ms\n")
-        sb.append("Backend RTT: ${lat.getBackendLatency()}ms\n")
-        sb.append("Total Wake-to-Response: ${lat.getTotalWakeToResponse()}ms\n\n")
+        sb.append("--- Latency ---\n")
+        sb.append("p50: ${lat.getP50Latency()}ms, p95: ${lat.getP95Latency()}ms\n\n")
         
-        sb.append("--- Connectivity ---\n")
-        sb.append("BT Route Uptime: ${getBluetoothUptimeMs() / 1000}s\n")
-        sb.append("Route Loss Count: ${stats.routeLossCount}\n\n")
-        
-        val currentBattery = takeBatterySnapshot("Export")
-        sb.append("--- Final Battery ---\n")
-        sb.append("Level: ${currentBattery.level}%\n")
-        sb.append("Temp: ${currentBattery.temperature}°C\n")
-        sb.append("Current: ${currentBattery.currentNow ?: "N/A"}uA\n")
+        sb.append("--- Resources ---\n")
+        sb.append("Listening Time: ${stats.totalListeningMs / 1000}s\n")
+        sb.append("Battery Change: ${stats.batteryChange}%\n")
+        sb.append("Max Temp: ${stats.maxTemperature}°C\n")
         
         return sb.toString()
     }

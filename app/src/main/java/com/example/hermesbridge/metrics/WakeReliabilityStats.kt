@@ -17,8 +17,29 @@ data class WakeReliabilityStats(
     val sessionRecoveryCount: Int = 0,
     val routeRecoveryCount: Int = 0,
     val stopReason: String = "Unknown",
-    val screenOffLimitReachedCount: Int = 0
+    val screenOffLimitReachedCount: Int = 0,
+    val deliberateWakeAttempts: Int = 0,
+    val duplicateDetectionsIgnored: Int = 0,
+    val maxTemperature: Float = 0f,
+    val batteryChange: Int = 0,
+    val sessionUptimeMs: Long = 0,
+    val routeUptimeMs: Long = 0
 ) {
+    fun getPrecision(): Double {
+        val total = trueDetections + falseDetections
+        if (total == 0) return 0.0
+        return trueDetections.toDouble() / total
+    }
+
+    fun getRecall(): Double {
+        if (deliberateWakeAttempts == 0) return 0.0
+        return trueDetections.toDouble() / deliberateWakeAttempts
+    }
+
+    fun getMissRate(): Double {
+        if (deliberateWakeAttempts == 0) return 0.0
+        return missedDetections.toDouble() / deliberateWakeAttempts
+    }
     fun getDetectionsPerHour(): Double {
         if (totalListeningMs == 0L) return 0.0
         return (detections.toDouble() / (totalListeningMs.toDouble() / 3600000.0))

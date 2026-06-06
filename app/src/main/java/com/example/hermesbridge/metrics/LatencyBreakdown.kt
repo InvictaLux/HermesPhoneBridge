@@ -11,8 +11,26 @@ data class LatencyBreakdown(
     var backendResponseReceived: Long = 0,
     var ttsStart: Long = 0,
     var ttsComplete: Long = 0,
-    var wakeResume: Long = 0
+    var wakeResume: Long = 0,
+    val history: MutableList<Long> = mutableListOf()
 ) {
+    fun recordDetection(latency: Long) {
+        history.add(latency)
+    }
+
+    fun getP50Latency(): Long {
+        if (history.isEmpty()) return 0
+        val sorted = history.sorted()
+        return sorted[sorted.size / 2]
+    }
+
+    fun getP95Latency(): Long {
+        if (history.isEmpty()) return 0
+        val sorted = history.sorted()
+        val index = (sorted.size * 0.95).toInt().coerceAtMost(sorted.size - 1)
+        return sorted[index]
+    }
+
     fun getWakeDetectionLatency(): Long = if (wakeDetected > 0 && wakeDetectionStart > 0) wakeDetected - wakeDetectionStart else 0
     fun getWakeToListenLatency(): Long = if (speechRecognizerStart > 0 && wakeDetected > 0) speechRecognizerStart - wakeDetected else 0
     fun getSpeechStartToFirstPartial(): Long = if (firstPartialTranscript > 0 && speechRecognizerStart > 0) firstPartialTranscript - speechRecognizerStart else 0

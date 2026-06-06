@@ -8,4 +8,5 @@ interface WakeWordEngine {
     fun processFrame(frame: ShortArray): WakeWordDetection?
     fun stop()
     fun release()
+    fun setSensitivity(sensitivity: Float)
 }

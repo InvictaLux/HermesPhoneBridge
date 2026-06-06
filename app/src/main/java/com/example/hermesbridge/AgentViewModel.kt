@@ -94,6 +94,10 @@ class AgentViewModel(
         }
     }
 
+    fun onMarkDeliberateWakeClicked() {
+        controller.onDeliberateAttempt()
+    }
+
     fun onResetMetricsClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.ResetMetrics)

@@ -239,6 +239,25 @@ fun AgentScreen(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+            
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("Tuning Controls", style = MaterialTheme.typography.labelMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { viewModel.onMarkDeliberateWakeClicked() }, modifier = Modifier.weight(1f)) {
+                            Text("Try Wake")
+                        }
+                        Button(onClick = { viewModel.onMarkMissedWakeClicked() }, modifier = Modifier.weight(1f)) {
+                            Text("Missed")
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
 
             Text(
                 text = state.turnState.getUserMessage(),
@@ -436,9 +455,12 @@ fun AgentScreen(
                     Text(
                         text = """
                             Wake Detections: ${state.reliabilityStats.detections}
+                            Attempts: ${state.reliabilityStats.deliberateWakeAttempts}
                             True/False/Missed: ${state.reliabilityStats.trueDetections} / ${state.reliabilityStats.falseDetections} / ${state.reliabilityStats.missedDetections}
+                            Recall: ${"%.2f".format(state.reliabilityStats.getRecall())}
+                            Precision: ${"%.2f".format(state.reliabilityStats.getPrecision())}
                             False Detections/Hr: ${"%.2f".format(state.reliabilityStats.getFalseDetectionsPerHour())}
-                            Last Wake Latency: ${state.lastLatency.getWakeDetectionLatency()}ms
+                            p50 / p95 Latency: ${state.lastLatency.getP50Latency()}ms / ${state.lastLatency.getP95Latency()}ms
                             Last STT Latency: ${state.lastLatency.getSpeechStartToFinal()}ms
                             Last Backend RTT: ${state.lastLatency.getBackendLatency()}ms
                             Total Wake-to-Resp: ${state.lastLatency.getTotalWakeToResponse()}ms
