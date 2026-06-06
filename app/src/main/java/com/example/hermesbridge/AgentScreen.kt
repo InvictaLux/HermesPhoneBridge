@@ -28,6 +28,7 @@ import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.conversation.ConversationTurnStatus
+import com.example.hermesbridge.wakeword.WakeWordStatus
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -307,6 +308,84 @@ fun AgentScreen(
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Wake Word Offline Smoke Test",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { 
+                        if (state.wakeWordStatus is WakeWordStatus.Listening) {
+                            viewModel.onStopWakeWordTestClicked()
+                        } else {
+                            viewModel.onStartWakeWordTestClicked()
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    enabled = state.audioRouteStatus is BluetoothAudioRouteStatus.Routed && 
+                              state.turnState is ConversationTurnState.Idle
+                ) {
+                    Text(if (state.wakeWordStatus is WakeWordStatus.Listening) "Stop Wake Test" else "Start Wake Test")
+                }
+            }
+
+            Text(
+                text = state.wakeWordStatus.getUserMessage(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.tertiary
+            )
+
+            state.lastWakeDetection?.let { detection ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "DETECTED: ${detection.keyword}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                        )
+                        Text(
+                            text = "Latency: ${detection.latencyMs}ms",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = { viewModel.onCorrectDetectionClicked() },
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Correct")
+                            }
+                            Button(
+                                onClick = { viewModel.onFalseTriggerClicked() },
+                                modifier = Modifier.weight(1f),
+                                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                )
+                            ) {
+                                Text("False")
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (state.trueDetectionCount > 0 || state.falseTriggerCount > 0) {
+                Text(
+                    text = "Results: ${state.trueDetectionCount} True / ${state.falseTriggerCount} False",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
             }
         }
 

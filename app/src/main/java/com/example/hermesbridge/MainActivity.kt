@@ -20,6 +20,8 @@ import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.trigger.MetaWearableTurnTrigger
+import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine
+import com.example.hermesbridge.wakeword.WakeWordTestManager
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
@@ -38,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var wearableInputSource: MetaWearableInputSource
     private lateinit var turnCoordinator: ConversationTurnCoordinator
     private lateinit var turnTrigger: MetaWearableTurnTrigger
+    private lateinit var wakeWordManager: WakeWordTestManager
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -83,6 +86,11 @@ class MainActivity : ComponentActivity() {
         wearableInputSource = MetaWearableInputSource()
         metaDatManager = MetaDatManager(this)
         turnTrigger = MetaWearableTurnTrigger()
+
+        val porcupineEngine = PorcupineWakeWordEngine(this, BuildConfig.PICOVOICE_ACCESS_KEY)
+        wakeWordManager = WakeWordTestManager(this, porcupineEngine) {
+            audioRouteManager.isRoutingToBluetooth()
+        }
 
         // 1. Initialize Inputs and Repositories
         val phoneInputSource = PhoneTextInputSource()
@@ -180,6 +188,19 @@ class MainActivity : ComponentActivity() {
                 viewModel.updateTriggerStatus(status)
             }
         }
+
+        lifecycleScope.launch {
+            wakeWordManager.status.collect { status ->
+                Log.d("HermesBridge", "Wake Word Status Update: $status")
+                viewModel.updateWakeWordStatus(status)
+            }
+        }
+
+        lifecycleScope.launch {
+            wakeWordManager.lastDetection.collect { detection ->
+                viewModel.updateLastWakeDetection(detection)
+            }
+        }
         
         // Command listener for UI actions
         lifecycleScope.launch {
@@ -241,6 +262,12 @@ class MainActivity : ComponentActivity() {
                     }
                     is UiCommand.NewSession -> {
                         viewModel.startNewSession()
+                    }
+                    is UiCommand.StartWakeWordTest -> {
+                        wakeWordManager.startTest()
+                    }
+                    is UiCommand.StopWakeWordTest -> {
+                        wakeWordManager.stopTest()
                     }
                 }
             }
@@ -319,6 +346,9 @@ class MainActivity : ComponentActivity() {
         }
         if (::turnTrigger.isInitialized) {
             turnTrigger.stop()
+        }
+        if (::wakeWordManager.isInitialized) {
+            wakeWordManager.release()
         }
         wearableInputSource.stop()
         speechOutput?.shutdown()

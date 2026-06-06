@@ -31,6 +31,7 @@ android {
         buildConfigField("String", "AGENT_ENDPOINT", "\"${secretsProperties.getProperty("AGENT_ENDPOINT", "ask")}\"")
         buildConfigField("String", "DEVICE_ID", "\"${secretsProperties.getProperty("DEVICE_ID", "pixel10a-dev-001")}\"")
         buildConfigField("String", "API_KEY", "\"${secretsProperties.getProperty("API_KEY", "")}\"")
+        buildConfigField("String", "PICOVOICE_ACCESS_KEY", "\"${secretsProperties.getProperty("PICOVOICE_ACCESS_KEY", "")}\"")
 
         manifestPlaceholders["metaApplicationId"] = secretsProperties.getProperty("META_APPLICATION_ID", "0")
         manifestPlaceholders["metaClientToken"] = secretsProperties.getProperty("META_CLIENT_TOKEN", "0")
@@ -75,4 +76,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.gson)
     implementation(libs.meta.wearables.dat.core)
+    implementation(libs.porcupine.android)
 }

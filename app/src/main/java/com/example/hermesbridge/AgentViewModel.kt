@@ -18,6 +18,8 @@ import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
 import com.example.hermesbridge.speech.SpeechRecognitionResult
 import com.example.hermesbridge.trigger.WearableTriggerStatus
+import com.example.hermesbridge.wakeword.WakeWordStatus
+import com.example.hermesbridge.wakeword.WakeWordDetection
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -47,6 +49,8 @@ sealed class UiCommand {
     object StartWearableSpeechTest : UiCommand()
     object StopWearableSpeechTest : UiCommand()
     object NewSession : UiCommand()
+    object StartWakeWordTest : UiCommand()
+    object StopWakeWordTest : UiCommand()
 }
 
 class AgentViewModel(
@@ -167,6 +171,34 @@ class AgentViewModel(
 
     fun updateTriggerStatus(status: WearableTriggerStatus) {
         _uiState.update { it.copy(triggerStatus = status) }
+    }
+
+    fun updateWakeWordStatus(status: WakeWordStatus) {
+        _uiState.update { it.copy(wakeWordStatus = status) }
+    }
+
+    fun updateLastWakeDetection(detection: WakeWordDetection?) {
+        _uiState.update { it.copy(lastWakeDetection = detection) }
+    }
+
+    fun onStartWakeWordTestClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.StartWakeWordTest)
+        }
+    }
+
+    fun onStopWakeWordTestClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.StopWakeWordTest)
+        }
+    }
+
+    fun onCorrectDetectionClicked() {
+        _uiState.update { it.copy(trueDetectionCount = it.trueDetectionCount + 1) }
+    }
+
+    fun onFalseTriggerClicked() {
+        _uiState.update { it.copy(falseTriggerCount = it.falseTriggerCount + 1) }
     }
 
     fun onRegisterMetaDatClicked() {
