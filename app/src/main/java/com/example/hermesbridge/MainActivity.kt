@@ -1,5 +1,6 @@
 package com.example.hermesbridge
 
+import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.activity.ComponentActivity
@@ -17,8 +18,10 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.permissions.MetaPermissionManager
 import com.example.hermesbridge.permissions.PermissionState
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
+import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
+import com.example.hermesbridge.metrics.InteractionMetricsCollector
 import com.example.hermesbridge.trigger.MetaWearableTurnTrigger
 import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine
 import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator
@@ -26,6 +29,7 @@ import com.example.hermesbridge.wakeword.WakeWordTestManager
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -43,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var turnTrigger: MetaWearableTurnTrigger
     private lateinit var wakeWordManager: WakeWordTestManager
     private lateinit var wakeTurnCoordinator: WakeWordConversationCoordinator
+    private lateinit var metricsCollector: InteractionMetricsCollector
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -88,18 +93,12 @@ class MainActivity : ComponentActivity() {
         wearableInputSource = MetaWearableInputSource()
         metaDatManager = MetaDatManager(this)
         turnTrigger = MetaWearableTurnTrigger()
+        metricsCollector = InteractionMetricsCollector(this)
 
         val porcupineEngine = PorcupineWakeWordEngine(this, BuildConfig.PICOVOICE_ACCESS_KEY)
         wakeWordManager = WakeWordTestManager(this, porcupineEngine) {
             audioRouteManager.isRoutingToBluetooth()
         }
-
-        wakeTurnCoordinator = WakeWordConversationCoordinator(
-            lifecycleScope,
-            viewModel,
-            wakeWordManager,
-            turnCoordinator
-        )
 
         // 1. Initialize Inputs and Repositories
         val phoneInputSource = PhoneTextInputSource()
@@ -120,7 +119,16 @@ class MainActivity : ComponentActivity() {
             metaDatManager,
             audioRouteManager,
             speechToText,
-            wearableInputSource
+            wearableInputSource,
+            metricsCollector
+        )
+
+        wakeTurnCoordinator = WakeWordConversationCoordinator(
+            lifecycleScope,
+            viewModel,
+            wakeWordManager,
+            turnCoordinator,
+            metricsCollector
         )
 
         // Connect wearable input source to the ViewModel logic
@@ -142,7 +150,6 @@ class MainActivity : ComponentActivity() {
         // 4. Status Observers
         lifecycleScope.launch {
             metaDatManager.status.collect { status ->
-                Log.d("HermesBridge", "Meta DAT Status Update: $status")
                 viewModel.updateMetaDatStatus(status)
                 if (status is MetaDatStatus.MissingMetaApp) {
                     viewModel.updateMetaDatMessage("Install or open the Meta AI companion app, then return here.")
@@ -151,145 +158,74 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
-        lifecycleScope.launch {
-            metaDatManager.capabilities.collect { caps ->
-                viewModel.updateMetaCapabilities(caps)
-            }
-        }
-        lifecycleScope.launch {
-            metaDatManager.audioInfo.collect { audio ->
-                viewModel.updateMetaAudioInfo(audio)
-            }
-        }
+        
         lifecycleScope.launch {
             audioRouteManager.status.collect { status ->
-                Log.d("HermesBridge", "Audio Route Status Update: $status")
                 viewModel.updateAudioRouteStatus(status)
+                if (status is BluetoothAudioRouteStatus.Routed) {
+                    metricsCollector.onBluetoothRouteStarted()
+                } else {
+                    metricsCollector.onBluetoothRouteStopped()
+                }
             }
         }
+        
         lifecycleScope.launch {
-            pcmCaptureManager.status.collect { status ->
-                viewModel.updatePcmCaptureStatus(status)
-            }
+            metricsCollector.reliabilityStats.collect { viewModel.updateReliabilityStats(it) }
         }
+        
         lifecycleScope.launch {
-            pcmCaptureManager.result.collect { result ->
-                viewModel.updatePcmCaptureResult(result)
-            }
+            metricsCollector.lastLatency.collect { viewModel.updateLastLatency(it) }
         }
+
         lifecycleScope.launch {
-            speechToText.status.collect { status ->
-                viewModel.updateSpeechStatus(status)
-            }
-        }
-        lifecycleScope.launch {
-            speechToText.result.collect { result ->
-                viewModel.updateSpeechResult(result)
-            }
-        }
-        lifecycleScope.launch {
-            turnCoordinator.turnState.collect { status ->
-                viewModel.updateConversationTurnState(status)
-            }
-        }
-        lifecycleScope.launch {
-            turnTrigger.status.collect { status ->
-                viewModel.updateTriggerStatus(status)
+            while (true) {
+                viewModel.updateBtUptime(metricsCollector.getBluetoothUptimeMs())
+                delay(1000)
             }
         }
 
         lifecycleScope.launch {
-            wakeTurnCoordinator.isWakeModeEnabled.collect { enabled ->
-                viewModel.updateWakeModeEnabled(enabled)
-            }
+            wakeTurnCoordinator.isWakeModeEnabled.collect { viewModel.updateWakeModeEnabled(it) }
         }
 
         lifecycleScope.launch {
-            wakeWordManager.status.collect { status ->
-                Log.d("HermesBridge", "Wake Word Status Update: $status")
-                viewModel.updateWakeWordStatus(status)
-            }
+            wakeWordManager.status.collect { viewModel.updateWakeWordStatus(it) }
         }
 
         lifecycleScope.launch {
-            wakeWordManager.lastDetection.collect { detection ->
-                viewModel.updateLastWakeDetection(detection)
-            }
+            wakeWordManager.lastDetection.collect { viewModel.updateLastWakeDetection(it) }
+        }
+        
+        lifecycleScope.launch {
+            turnCoordinator.turnState.collect { viewModel.updateConversationTurnState(it) }
         }
         
         // Command listener for UI actions
         lifecycleScope.launch {
             viewModel.commands.collect { command ->
                 when (command) {
-                    is UiCommand.LaunchMetaDatRegistration -> {
-                        viewModel.updateMetaDatMessage("Registration flow launched.")
-                        metaDatManager.startRegistration(this@MainActivity)
-                    }
-                    is UiCommand.RequestMetaPermissions -> {
-                        permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
-                    }
-                    is UiCommand.CreateMetaSession -> {
-                        if (permissionManager.isReady()) {
-                            viewModel.updateMetaDatMessage("Starting session...")
-                            metaDatManager.createDeviceSession()
-                        } else {
-                            viewModel.updatePermissionMessage("Bluetooth permissions required for session.")
-                        }
-                    }
-                    is UiCommand.CloseMetaSession -> {
-                        viewModel.updateMetaDatMessage("Closing session...")
-                        metaDatManager.closeDeviceSession()
-                    }
-                    is UiCommand.ReconnectMetaSession -> {
-                        viewModel.updateMetaDatMessage("Reconnecting...")
-                        metaDatManager.reconnectDeviceSession()
-                    }
-                    is UiCommand.RefreshMetaSession -> {
-                        viewModel.updateMetaDatMessage("Refreshing health...")
-                        metaDatManager.refreshSessionHealth()
-                    }
-                    is UiCommand.DiscoverMetaCapabilities -> {
-                        viewModel.updateMetaDatMessage("Discovering capabilities...")
-                        metaDatManager.discoverCapabilities()
-                    }
-                    is UiCommand.DiscoverMetaAudioApi -> {
-                        viewModel.updateMetaDatMessage("Inspecting Audio API...")
-                        metaDatManager.discoverAudioApi()
-                    }
-                    is UiCommand.StartBluetoothAudioRoute -> {
-                        if (metaDatManager.hasUsableSession()) {
-                            audioRouteManager.startBluetoothRoute()
-                        } else {
-                            viewModel.updateMetaDatMessage("Active session required for audio routing.")
-                        }
-                    }
-                    is UiCommand.StopBluetoothAudioRoute -> {
-                        audioRouteManager.stopBluetoothRoute()
-                    }
-                    is UiCommand.CapturePcmSample -> {
-                        pcmCaptureManager.startCapture()
-                    }
-                    is UiCommand.StartWearableSpeechTest -> {
-                        turnCoordinator.startWearableTurn()
-                    }
-                    is UiCommand.StopWearableSpeechTest -> {
-                        turnCoordinator.cancelTurn()
-                    }
-                    is UiCommand.NewSession -> {
-                        viewModel.startNewSession()
-                    }
-                    is UiCommand.StartWakeWordTest -> {
-                        wakeWordManager.startTest()
-                    }
-                    is UiCommand.StopWakeWordTest -> {
-                        wakeWordManager.stopTest()
-                    }
-                    is UiCommand.EnableWakeMode -> {
-                        wakeTurnCoordinator.setWakeModeEnabled(true)
-                    }
-                    is UiCommand.DisableWakeMode -> {
-                        wakeTurnCoordinator.setWakeModeEnabled(false)
-                    }
+                    is UiCommand.LaunchMetaDatRegistration -> metaDatManager.startRegistration(this@MainActivity)
+                    is UiCommand.RequestMetaPermissions -> permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
+                    is UiCommand.CreateMetaSession -> metaDatManager.createDeviceSession()
+                    is UiCommand.CloseMetaSession -> metaDatManager.closeDeviceSession()
+                    is UiCommand.ReconnectMetaSession -> metaDatManager.reconnectDeviceSession()
+                    is UiCommand.RefreshMetaSession -> metaDatManager.refreshSessionHealth()
+                    is UiCommand.DiscoverMetaCapabilities -> metaDatManager.discoverCapabilities()
+                    is UiCommand.DiscoverMetaAudioApi -> metaDatManager.discoverAudioApi()
+                    is UiCommand.StartBluetoothAudioRoute -> audioRouteManager.startBluetoothRoute()
+                    is UiCommand.StopBluetoothAudioRoute -> audioRouteManager.stopBluetoothRoute()
+                    is UiCommand.CapturePcmSample -> pcmCaptureManager.startCapture()
+                    is UiCommand.StartWearableSpeechTest -> turnCoordinator.startWearableTurn()
+                    is UiCommand.StopWearableSpeechTest -> turnCoordinator.cancelTurn()
+                    is UiCommand.NewSession -> viewModel.startNewSession()
+                    is UiCommand.StartWakeWordTest -> wakeWordManager.startTest()
+                    is UiCommand.StopWakeWordTest -> wakeWordManager.stopTest()
+                    is UiCommand.EnableWakeMode -> wakeTurnCoordinator.setWakeModeEnabled(true)
+                    is UiCommand.DisableWakeMode -> wakeTurnCoordinator.setWakeModeEnabled(false)
+                    is UiCommand.MarkMissedWake -> metricsCollector.onMissedDetection()
+                    is UiCommand.ResetMetrics -> metricsCollector.resetMetrics()
+                    is UiCommand.ExportMetrics -> exportMetrics()
                 }
             }
         }
@@ -317,18 +253,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun exportMetrics() {
+        val summary = metricsCollector.generateExportSummary()
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "Hermes Bridge Metrics Export")
+            putExtra(Intent.EXTRA_TEXT, summary)
+        }
+        startActivity(Intent.createChooser(intent, "Export Metrics Summary"))
+    }
+
     override fun onResume() {
         super.onResume()
         refreshAllStatuses()
     }
 
     private fun refreshAllStatuses() {
-        if (::metaDatManager.isInitialized) {
-            metaDatManager.refreshStatus()
-        }
-        if (::audioRouteManager.isInitialized) {
-            audioRouteManager.refreshRouteStatus()
-        }
+        if (::metaDatManager.isInitialized) metaDatManager.refreshStatus()
+        if (::audioRouteManager.isInitialized) audioRouteManager.refreshRouteStatus()
         if (::permissionManager.isInitialized) {
             val state = permissionManager.checkPermissionState()
             val msg = when (state) {
@@ -341,9 +283,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
-        // Stop speaking immediately when backgrounded
         viewModel.stopSpeaking()
-        // Stop wake detection when backgrounded (Gate 10E Task 7)
         if (::wakeTurnCoordinator.isInitialized) {
             wakeTurnCoordinator.setWakeModeEnabled(false)
         }
@@ -353,31 +293,16 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         try {
             unregisterReceiver(batteryReceiver)
-        } catch (e: Exception) {
-            // Already unregistered or wasn't registered
-        }
-        // Release hardware synthesis bindings
-        if (::metaDatManager.isInitialized) {
-            metaDatManager.closeDeviceSession()
-        }
-        if (::audioRouteManager.isInitialized) {
-            audioRouteManager.stopBluetoothRoute()
-        }
-        if (::pcmCaptureManager.isInitialized) {
-            pcmCaptureManager.stopCapture()
-        }
-        if (::speechToText.isInitialized) {
-            speechToText.destroy()
-        }
-        if (::turnTrigger.isInitialized) {
-            turnTrigger.stop()
-        }
-        if (::wakeWordManager.isInitialized) {
-            wakeWordManager.release()
-        }
-        if (::wakeTurnCoordinator.isInitialized) {
-            wakeTurnCoordinator.stop()
-        }
+        } catch (e: Exception) { }
+        
+        if (::metaDatManager.isInitialized) metaDatManager.closeDeviceSession()
+        if (::audioRouteManager.isInitialized) audioRouteManager.stopBluetoothRoute()
+        if (::pcmCaptureManager.isInitialized) pcmCaptureManager.stopCapture()
+        if (::speechToText.isInitialized) speechToText.destroy()
+        if (::turnTrigger.isInitialized) turnTrigger.stop()
+        if (::wakeWordManager.isInitialized) wakeWordManager.release()
+        if (::wakeTurnCoordinator.isInitialized) wakeTurnCoordinator.stop()
+
         wearableInputSource.stop()
         speechOutput?.shutdown()
     }

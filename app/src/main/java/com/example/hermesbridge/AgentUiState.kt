@@ -13,6 +13,9 @@ import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.trigger.WearableTriggerStatus
 import com.example.hermesbridge.wakeword.WakeWordStatus
 import com.example.hermesbridge.wakeword.WakeWordDetection
+import com.example.hermesbridge.metrics.WakeReliabilityStats
+import com.example.hermesbridge.metrics.LatencyBreakdown
+import com.example.hermesbridge.metrics.BatterySnapshot
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -48,5 +51,9 @@ data class AgentUiState(
     val lastWakeDetection: WakeWordDetection? = null,
     val trueDetectionCount: Int = 0,
     val falseTriggerCount: Int = 0,
-    val isWakeModeEnabled: Boolean = false
+    val isWakeModeEnabled: Boolean = false,
+    val reliabilityStats: WakeReliabilityStats = WakeReliabilityStats(),
+    val lastLatency: LatencyBreakdown = LatencyBreakdown(),
+    val batterySnapshot: BatterySnapshot? = null,
+    val btUptimeMs: Long = 0
 )

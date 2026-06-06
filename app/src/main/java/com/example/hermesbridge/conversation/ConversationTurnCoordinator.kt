@@ -7,8 +7,10 @@ import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.bridge.MetaWearableInputSource
 import com.example.hermesbridge.meta.MetaDatManager
 import com.example.hermesbridge.meta.MetaDatStatus
+import com.example.hermesbridge.metrics.InteractionMetricsCollector
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.SpeechRecognitionStatus
+import android.os.SystemClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,7 +24,8 @@ class ConversationTurnCoordinator(
     val metaDatManager: MetaDatManager,
     private val audioRouteManager: BluetoothAudioRouteManager,
     private val speechToText: AndroidSpeechRecognizerInput,
-    private val wearableInputSource: MetaWearableInputSource
+    private val wearableInputSource: MetaWearableInputSource,
+    private val metricsCollector: InteractionMetricsCollector? = null
 ) {
     private val _turnState = MutableStateFlow<ConversationTurnState>(ConversationTurnState.Idle)
     val turnState: StateFlow<ConversationTurnState> = _turnState.asStateFlow()
@@ -96,23 +99,30 @@ class ConversationTurnCoordinator(
         viewModel.stopSpeaking()
         speechToText.stopListening()
 
+        metricsCollector?.recordLatencyEvent { it.speechRecognizerStart = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.Listening
         speechToText.startListening()
     }
 
     private fun handleFinalTranscript(text: String, confidence: Float) {
         Log.i("HermesTurn", "Final transcript received: $text")
+        metricsCollector?.recordLatencyEvent { it.finalTranscript = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.ProcessingTranscript
         speechToText.stopListening()
         
+        metricsCollector?.recordLatencyEvent { it.backendRequestStart = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.Sending
         wearableInputSource.submitTranscript(text, confidence)
     }
 
     private fun startSpeaking(text: String) {
+        metricsCollector?.recordLatencyEvent { it.backendResponseReceived = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.Speaking
+        metricsCollector?.recordLatencyEvent { it.ttsStart = SystemClock.elapsedRealtime() }
         viewModel.speakResponse(text) {
+            metricsCollector?.recordLatencyEvent { it.ttsComplete = SystemClock.elapsedRealtime() }
             _turnState.value = ConversationTurnState.Completed
+            metricsCollector?.takeBatterySnapshot("TurnCompleted")
             scope.launch {
                 kotlinx.coroutines.delay(1000)
                 resetToIdle()

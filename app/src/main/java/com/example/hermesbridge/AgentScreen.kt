@@ -407,6 +407,59 @@ fun AgentScreen(
                     color = MaterialTheme.colorScheme.secondary
                 )
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Debug Metrics",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = """
+                            Wake Detections: ${state.reliabilityStats.detections}
+                            True/False/Missed: ${state.reliabilityStats.trueDetections} / ${state.reliabilityStats.falseDetections} / ${state.reliabilityStats.missedDetections}
+                            False Detections/Hr: ${"%.2f".format(state.reliabilityStats.getFalseDetectionsPerHour())}
+                            Last Wake Latency: ${state.lastLatency.getWakeDetectionLatency()}ms
+                            Last STT Latency: ${state.lastLatency.getSpeechStartToFinal()}ms
+                            Last Backend RTT: ${state.lastLatency.getBackendLatency()}ms
+                            Total Wake-to-Resp: ${state.lastLatency.getTotalWakeToResponse()}ms
+                            BT Route Uptime: ${state.btUptimeMs / 1000}s
+                            Battery: ${state.batteryLevel}% (${"%.1f".format(state.batterySnapshot?.temperature ?: 0f)}°C)
+                        """.trimIndent(),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                    
+                    Spacer(modifier = Modifier.height(8.dp))
+                    
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            onClick = { viewModel.onMarkMissedWakeClicked() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Mark Missed")
+                        }
+                        Button(
+                            onClick = { viewModel.onResetMetricsClicked() },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Reset")
+                        }
+                    }
+                    Button(
+                        onClick = { viewModel.onExportMetricsClicked() },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Export Metrics Summary")
+                    }
+                }
+            }
         }
 
         OutlinedTextField(

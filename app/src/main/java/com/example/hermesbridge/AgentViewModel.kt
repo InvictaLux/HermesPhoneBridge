@@ -20,6 +20,9 @@ import com.example.hermesbridge.speech.SpeechRecognitionResult
 import com.example.hermesbridge.trigger.WearableTriggerStatus
 import com.example.hermesbridge.wakeword.WakeWordStatus
 import com.example.hermesbridge.wakeword.WakeWordDetection
+import com.example.hermesbridge.metrics.WakeReliabilityStats
+import com.example.hermesbridge.metrics.LatencyBreakdown
+import com.example.hermesbridge.metrics.BatterySnapshot
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -53,6 +56,9 @@ sealed class UiCommand {
     object StopWakeWordTest : UiCommand()
     object EnableWakeMode : UiCommand()
     object DisableWakeMode : UiCommand()
+    object MarkMissedWake : UiCommand()
+    object ResetMetrics : UiCommand()
+    object ExportMetrics : UiCommand()
 }
 
 class AgentViewModel(
@@ -187,6 +193,22 @@ class AgentViewModel(
         _uiState.update { it.copy(isWakeModeEnabled = enabled) }
     }
 
+    fun updateReliabilityStats(stats: WakeReliabilityStats) {
+        _uiState.update { it.copy(reliabilityStats = stats) }
+    }
+
+    fun updateLastLatency(latency: LatencyBreakdown) {
+        _uiState.update { it.copy(lastLatency = latency) }
+    }
+
+    fun updateBatterySnapshot(snapshot: BatterySnapshot) {
+        _uiState.update { it.copy(batterySnapshot = snapshot) }
+    }
+
+    fun updateBtUptime(uptimeMs: Long) {
+        _uiState.update { it.copy(btUptimeMs = uptimeMs) }
+    }
+
     fun onToggleWakeModeClicked() {
         viewModelScope.launch {
             if (_uiState.value.isWakeModeEnabled) {
@@ -298,6 +320,24 @@ class AgentViewModel(
     fun onNewSessionClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.NewSession)
+        }
+    }
+
+    fun onMarkMissedWakeClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.MarkMissedWake)
+        }
+    }
+
+    fun onResetMetricsClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.ResetMetrics)
+        }
+    }
+
+    fun onExportMetricsClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.ExportMetrics)
         }
     }
 

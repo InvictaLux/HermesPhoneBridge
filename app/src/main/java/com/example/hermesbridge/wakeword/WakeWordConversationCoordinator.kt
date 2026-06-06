@@ -4,6 +4,8 @@ import android.util.Log
 import com.example.hermesbridge.AgentViewModel
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.conversation.ConversationTurnState
+import com.example.hermesbridge.metrics.InteractionMetricsCollector
+import android.os.SystemClock
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,7 +16,8 @@ class WakeWordConversationCoordinator(
     private val scope: CoroutineScope,
     private val viewModel: AgentViewModel,
     private val wakeWordManager: WakeWordTestManager,
-    private val turnCoordinator: ConversationTurnCoordinator
+    private val turnCoordinator: ConversationTurnCoordinator,
+    private val metricsCollector: InteractionMetricsCollector? = null
 ) {
     private val _isWakeModeEnabled = MutableStateFlow(false)
     val isWakeModeEnabled: StateFlow<Boolean> = _isWakeModeEnabled.asStateFlow()
@@ -25,8 +28,10 @@ class WakeWordConversationCoordinator(
     fun setWakeModeEnabled(enabled: Boolean) {
         _isWakeModeEnabled.value = enabled
         if (enabled) {
+            metricsCollector?.onWakeModeEnabled()
             startWakeDetectionIfReady()
         } else {
+            metricsCollector?.takeBatterySnapshot("WakeModeDisabled")
             wakeWordManager.stopTest()
         }
     }
@@ -41,6 +46,7 @@ class WakeWordConversationCoordinator(
         }
 
         Log.i("HermesWakeCoord", "Starting wake detection...")
+        metricsCollector?.onWakeListeningStarted()
         wakeWordManager.startTest()
     }
 
@@ -50,6 +56,7 @@ class WakeWordConversationCoordinator(
             launch {
                 wakeWordManager.lastDetection.collect { detection ->
                     if (detection != null && _isWakeModeEnabled.value && !isProcessingWake) {
+                        metricsCollector?.onWakeDetected(detection.latencyMs)
                         handleWakeDetected()
                     }
                 }
@@ -61,6 +68,7 @@ class WakeWordConversationCoordinator(
                     if (state is ConversationTurnState.Idle) {
                         if (_isWakeModeEnabled.value) {
                             Log.i("HermesWakeCoord", "Turn idle, resuming/starting wake detection in 500ms...")
+                            metricsCollector?.recordLatencyEvent { it.wakeResume = SystemClock.elapsedRealtime() }
                             isProcessingWake = false
                             delay(500)
                             startWakeDetectionIfReady()
@@ -69,6 +77,7 @@ class WakeWordConversationCoordinator(
                         // Turn started (manually or via wake), stop wake detection if it was running
                         if (wakeWordManager.status.value is WakeWordStatus.Listening) {
                             Log.d("HermesWakeCoord", "Turn active, stopping wake detection.")
+                            metricsCollector?.onWakeListeningStopped()
                             wakeWordManager.stopTest()
                         }
                     }
