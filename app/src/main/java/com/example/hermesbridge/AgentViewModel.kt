@@ -122,6 +122,16 @@ class AgentViewModel(
         }
     }
 
+    fun onToggleAutoSpeakClicked() {
+        controller.updateAutoSpeak(!uiState.value.isAutoSpeakEnabled)
+    }
+
+    fun onSpeakTurnResponse(turn: ConversationTurn) {
+        turn.responseText?.let {
+            controller.speakResponse(it)
+        }
+    }
+
     fun onCorrectDetectionClicked() {
         controller.onTrueDetection()
     }

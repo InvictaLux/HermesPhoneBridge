@@ -60,5 +60,6 @@ data class AgentUiState(
     val wakeServiceState: WakeServiceState = WakeServiceState.Stopped,
     val sessionRecoveryAttempts: Int = 0,
     val routeRecoveryAttempts: Int = 0,
-    val screenOffLimitMinutes: Int = 60
+    val screenOffLimitMinutes: Int = 60,
+    val isAutoSpeakEnabled: Boolean = true
 )

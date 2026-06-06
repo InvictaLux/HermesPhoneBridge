@@ -176,7 +176,10 @@ class BridgeController(
                         }
                     )
                 }
-                speakResponse(textToSpeak)
+                // 5. Trigger Speech synthesis if it's a wearable voice turn or auto-speak is on
+                if (source == ConversationTurnSource.MetaWearableVoice || _uiState.value.isAutoSpeakEnabled) {
+                    speakResponse(textToSpeak)
+                }
             } else {
                 val errorDetails = response.error ?: "Communication Failure"
                 _uiState.update { state ->
@@ -242,12 +245,22 @@ class BridgeController(
     fun updateRouteRecoveryAttempts(a: Int) { _uiState.update { it.copy(routeRecoveryAttempts = a) } }
     fun updateScreenOffLimit(mins: Int) { _uiState.update { it.copy(screenOffLimitMinutes = mins) } }
     
+    fun updateAutoSpeak(enabled: Boolean) { _uiState.update { it.copy(isAutoSpeakEnabled = enabled) } }
+
     fun onTrueDetection() {
         metricsCollector.onTrueDetection()
     }
 
     fun onFalseDetection() {
         metricsCollector.onFalseDetection()
+    }
+
+    fun onMissedDetection() {
+        metricsCollector.onMissedDetection()
+    }
+
+    fun onDeliberateAttempt() {
+        metricsCollector.onDeliberateAttempt()
     }
 
     fun updateInputText(text: String) {
