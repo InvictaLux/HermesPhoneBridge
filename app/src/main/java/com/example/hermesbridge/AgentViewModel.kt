@@ -46,6 +46,8 @@ sealed class UiCommand {
     object MarkMissedWake : UiCommand()
     object ResetMetrics : UiCommand()
     object ExportMetrics : UiCommand()
+    object TogglePauseWake : UiCommand()
+    data class SetScreenOffLimit(val mins: Int) : UiCommand()
 }
 
 class AgentViewModel(
@@ -101,6 +103,18 @@ class AgentViewModel(
     fun onExportMetricsClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.ExportMetrics)
+        }
+    }
+
+    fun onTogglePauseWakeClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.TogglePauseWake)
+        }
+    }
+
+    fun onSetScreenOffLimit(mins: Int) {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.SetScreenOffLimit(mins))
         }
     }
 

@@ -20,10 +20,11 @@ import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.conversation.ConversationTurnState
 import com.example.hermesbridge.metrics.InteractionMetricsCollector
+import com.example.hermesbridge.service.WakeServiceState
+import com.example.hermesbridge.service.WakeWordForegroundService
 import com.example.hermesbridge.trigger.MetaWearableTurnTrigger
 import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator
 import com.example.hermesbridge.wakeword.WakeWordTestManager
-import com.example.hermesbridge.service.WakeWordForegroundService
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -103,6 +104,8 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.MarkMissedWake -> app.metricsCollector.onMissedDetection()
                     is UiCommand.ResetMetrics -> app.metricsCollector.resetMetrics()
                     is UiCommand.ExportMetrics -> exportMetrics()
+                    is UiCommand.TogglePauseWake -> togglePauseWake()
+                    is UiCommand.SetScreenOffLimit -> app.bridgeController.updateScreenOffLimit(command.mins)
                 }
             }
         }
@@ -139,6 +142,19 @@ class MainActivity : ComponentActivity() {
     private fun stopWakeService() {
         val intent = Intent(this, WakeWordForegroundService::class.java).apply {
             action = WakeWordForegroundService.ACTION_STOP
+        }
+        startService(intent)
+    }
+
+    private fun togglePauseWake() {
+        val currentState = app.bridgeController.uiState.value.wakeServiceState
+        val action = if (currentState == WakeServiceState.Stopped) {
+            WakeWordForegroundService.ACTION_RESUME
+        } else {
+            WakeWordForegroundService.ACTION_PAUSE
+        }
+        val intent = Intent(this, WakeWordForegroundService::class.java).apply {
+            this.action = action
         }
         startService(intent)
     }

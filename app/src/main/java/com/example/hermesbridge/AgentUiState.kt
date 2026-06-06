@@ -16,6 +16,7 @@ import com.example.hermesbridge.wakeword.WakeWordDetection
 import com.example.hermesbridge.metrics.WakeReliabilityStats
 import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.BatterySnapshot
+import com.example.hermesbridge.service.WakeServiceState
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -55,5 +56,9 @@ data class AgentUiState(
     val reliabilityStats: WakeReliabilityStats = WakeReliabilityStats(),
     val lastLatency: LatencyBreakdown = LatencyBreakdown(),
     val batterySnapshot: BatterySnapshot? = null,
-    val btUptimeMs: Long = 0
+    val btUptimeMs: Long = 0,
+    val wakeServiceState: WakeServiceState = WakeServiceState.Stopped,
+    val sessionRecoveryAttempts: Int = 0,
+    val routeRecoveryAttempts: Int = 0,
+    val screenOffLimitMinutes: Int = 60
 )

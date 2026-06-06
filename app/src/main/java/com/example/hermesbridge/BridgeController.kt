@@ -6,6 +6,7 @@ import com.example.hermesbridge.conversation.*
 import com.example.hermesbridge.metrics.BatterySnapshot
 import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.WakeReliabilityStats
+import com.example.hermesbridge.service.WakeServiceState
 import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.wakeword.WakeWordDetection
 import com.example.hermesbridge.wakeword.WakeWordStatus
@@ -235,6 +236,11 @@ class BridgeController(
     fun updateBatterySnapshot(s: BatterySnapshot) { _uiState.update { it.copy(batterySnapshot = s) } }
     fun updateBtUptime(u: Long) { _uiState.update { it.copy(btUptimeMs = u) } }
     fun updateBatteryState(level: Int, isCharging: Boolean) { _uiState.update { it.copy(batteryLevel = level, isBatteryCharging = isCharging) } }
+
+    fun updateWakeServiceState(s: WakeServiceState) { _uiState.update { it.copy(wakeServiceState = s) } }
+    fun updateSessionRecoveryAttempts(a: Int) { _uiState.update { it.copy(sessionRecoveryAttempts = a) } }
+    fun updateRouteRecoveryAttempts(a: Int) { _uiState.update { it.copy(routeRecoveryAttempts = a) } }
+    fun updateScreenOffLimit(mins: Int) { _uiState.update { it.copy(screenOffLimitMinutes = mins) } }
     
     fun onTrueDetection() {
         metricsCollector.onTrueDetection()

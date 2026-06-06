@@ -8,7 +8,16 @@ data class WakeReliabilityStats(
     val missedDetections: Int = 0,
     val routeLossCount: Int = 0,
     val restartCount: Int = 0,
-    val failureCount: Int = 0
+    val failureCount: Int = 0,
+    val serviceRuntimeMs: Long = 0,
+    val screenOffListeningMs: Long = 0,
+    val servicePauseCount: Int = 0,
+    val lowBatteryPauses: Int = 0,
+    val thermalPauses: Int = 0,
+    val sessionRecoveryCount: Int = 0,
+    val routeRecoveryCount: Int = 0,
+    val stopReason: String = "Unknown",
+    val screenOffLimitReachedCount: Int = 0
 ) {
     fun getDetectionsPerHour(): Double {
         if (totalListeningMs == 0L) return 0.0

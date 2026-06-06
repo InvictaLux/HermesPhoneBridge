@@ -113,7 +113,27 @@ class InteractionMetricsCollector(private val context: Context) {
     }
 
     fun onRouteLoss() {
-        _reliabilityStats.update { it.copy(routeLossCount = it.routeLossCount + 1) }
+        _reliabilityStats.update { it.copy(routeLossCount = it.routeLossCount + 1, routeRecoveryCount = it.routeRecoveryCount + 1) }
+    }
+
+    fun onSessionLoss() {
+        _reliabilityStats.update { it.copy(sessionRecoveryCount = it.sessionRecoveryCount + 1) }
+    }
+
+    fun onLowBatteryPause() {
+        _reliabilityStats.update { it.copy(lowBatteryPauses = it.lowBatteryPauses + 1, servicePauseCount = it.servicePauseCount + 1) }
+    }
+
+    fun onThermalPause() {
+        _reliabilityStats.update { it.copy(thermalPauses = it.thermalPauses + 1, servicePauseCount = it.servicePauseCount + 1) }
+    }
+
+    fun onScreenOffLimitReached() {
+        _reliabilityStats.update { it.copy(screenOffLimitReachedCount = it.screenOffLimitReachedCount + 1) }
+    }
+
+    fun setStopReason(reason: String) {
+        _reliabilityStats.update { it.copy(stopReason = reason) }
     }
 
     fun resetMetrics() {

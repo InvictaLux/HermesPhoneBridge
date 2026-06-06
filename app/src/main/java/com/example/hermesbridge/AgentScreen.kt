@@ -320,15 +320,28 @@ fun AgentScreen(
                         androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         else androidx.compose.material3.ButtonDefaults.buttonColors()
                 ) {
-                    Text(if (state.isWakeModeEnabled) "Disable Wake Mode" else "Enable Wake Mode")
+                    Text(if (state.isWakeModeEnabled) "Disable Background Wake" else "Enable Background Wake")
                 }
             }
 
             Text(
-                text = "Wake Mode: ${if (state.isWakeModeEnabled) "Active" else "Disabled"}",
+                text = "Background Wake: ${state.wakeServiceState.getUserMessage()}",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (state.isWakeModeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
             )
+            
+            if (state.isWakeModeEnabled) {
+                Text(
+                    text = "Policy: Level ${state.batteryLevel}% / Temp ${state.batterySnapshot?.temperature ?: "N/A"}°C",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Text(
+                    text = "Recovery: Session ${state.sessionRecoveryAttempts} / Route ${state.routeRecoveryAttempts}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
 
             Spacer(modifier = Modifier.height(8.dp))
 
