@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
         pcmCaptureManager = PcmCaptureManager(this, audioManager)
         turnTrigger = MetaWearableTurnTrigger()
 
-        val factory = AgentViewModelFactory(application, app.bridgeController)
+        val factory = AgentViewModelFactory(application, app.bridgeController, app.prefsRepository)
         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java]
 
         // Proxy commands to managers
@@ -105,11 +105,36 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.ResetMetrics -> app.metricsCollector.resetMetrics()
                     is UiCommand.ExportMetrics -> exportMetrics()
                     is UiCommand.TogglePauseWake -> togglePauseWake()
-                    is UiCommand.SetScreenOffLimit -> app.bridgeController.updateScreenOffLimit(command.mins)
+                    is UiCommand.SetScreenOffLimit -> {
+                        app.bridgeController.updateScreenOffLimit(command.mins)
+                        app.prefsRepository.updateScreenOffLimit(command.mins)
+                    }
                     is UiCommand.ManualMediaPause -> app.mediaCoexistenceManager.manualPause()
                     is UiCommand.ManualMediaResume -> app.mediaCoexistenceManager.manualResume()
-                    is UiCommand.ToggleMediaAutoPause -> app.mediaCoexistenceManager.setAutoPauseEnabled(!app.bridgeController.uiState.value.mediaState.isAutoPauseEnabled)
-                    is UiCommand.SetMediaResumePolicy -> app.mediaCoexistenceManager.setResumePolicy(command.policy)
+                    is UiCommand.ToggleMediaAutoPause -> {
+                        val newState = !app.bridgeController.uiState.value.mediaState.isAutoPauseEnabled
+                        app.mediaCoexistenceManager.setAutoPauseEnabled(newState)
+                        app.prefsRepository.updateMediaAutoPause(newState)
+                    }
+                    is UiCommand.SetMediaResumePolicy -> {
+                        app.mediaCoexistenceManager.setResumePolicy(command.policy)
+                        app.prefsRepository.updateMediaResumePolicy(command.policy)
+                    }
+                    is UiCommand.ResetSettings -> {
+                        app.prefsRepository.resetToDefaults()
+                        val s = app.prefsRepository.settings.value
+                        app.bridgeController.updateAutoSpeak(s.isAutoSpeakEnabled)
+                        app.bridgeController.updateInputText(s.unsentChatDraft)
+                        app.bridgeController.updateDiagnosticsExpanded(s.diagnosticsExpanded)
+                        app.bridgeController.updateWakeSensitivity(s.wakeSensitivity)
+                        app.bridgeController.updateWakeDebounce(s.wakeDebounceMs)
+                        app.mediaCoexistenceManager.setAutoPauseEnabled(s.mediaAutoPauseEnabled)
+                        app.mediaCoexistenceManager.setResumePolicy(s.mediaResumePolicy)
+                    }
+                    is UiCommand.ClearDraft -> {
+                        app.prefsRepository.updateChatDraft("")
+                        app.bridgeController.updateInputText("")
+                    }
                 }
             }
         }

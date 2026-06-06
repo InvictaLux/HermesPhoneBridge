@@ -52,11 +52,14 @@ sealed class UiCommand {
     object ManualMediaResume : UiCommand()
     object ToggleMediaAutoPause : UiCommand()
     data class SetMediaResumePolicy(val policy: com.example.hermesbridge.media.MediaResumePolicy) : UiCommand()
+    object ResetSettings : UiCommand()
+    object ClearDraft : UiCommand()
 }
 
 class AgentViewModel(
     application: Application,
-    private val controller: BridgeController
+    private val controller: BridgeController,
+    private val prefsRepository: com.example.hermesbridge.settings.AppPreferencesRepository
 ) : AndroidViewModel(application) {
 
     val uiState: StateFlow<AgentUiState> = controller.uiState
@@ -114,6 +117,18 @@ class AgentViewModel(
         }
     }
 
+    fun onResetSettingsClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.ResetSettings)
+        }
+    }
+
+    fun onClearDraftClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.ClearDraft)
+        }
+    }
+
     fun onTogglePauseWakeClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.TogglePauseWake)
@@ -126,6 +141,16 @@ class AgentViewModel(
         }
     }
 
+    fun onSetWakeSensitivity(sensitivity: Float) {
+        controller.updateWakeSensitivity(sensitivity)
+        prefsRepository.updateWakeSensitivity(sensitivity)
+    }
+
+    fun onSetWakeDebounce(ms: Long) {
+        controller.updateWakeDebounce(ms)
+        prefsRepository.updateWakeDebounce(ms)
+    }
+
     fun onManualMediaPauseClicked() { viewModelScope.launch { _commands.emit(UiCommand.ManualMediaPause) } }
     fun onManualMediaResumeClicked() { viewModelScope.launch { _commands.emit(UiCommand.ManualMediaResume) } }
     fun onToggleMediaAutoPause() { viewModelScope.launch { _commands.emit(UiCommand.ToggleMediaAutoPause) } }
@@ -133,8 +158,15 @@ class AgentViewModel(
         viewModelScope.launch { _commands.emit(UiCommand.SetMediaResumePolicy(policy)) }
     }
 
+    fun onToggleDiagnostics(expanded: Boolean) {
+        controller.updateDiagnosticsExpanded(expanded)
+        prefsRepository.updateDiagnosticsExpanded(expanded)
+    }
+
     fun onToggleAutoSpeakClicked() {
-        controller.updateAutoSpeak(!uiState.value.isAutoSpeakEnabled)
+        val newState = !uiState.value.isAutoSpeakEnabled
+        controller.updateAutoSpeak(newState)
+        prefsRepository.updateAutoSpeak(newState)
     }
 
     fun onSpeakTurnResponse(turn: ConversationTurn) {
@@ -167,12 +199,20 @@ class AgentViewModel(
 
     fun onInputTextChanged(newText: String) {
         controller.updateInputText(newText)
+        viewModelScope.launch {
+            // Simple debounce for draft saving
+            kotlinx.coroutines.delay(500)
+            if (uiState.value.inputText == newText) {
+                prefsRepository.updateChatDraft(newText)
+            }
+        }
     }
     
     fun submitScreenInput() {
         val text = uiState.value.inputText.trim()
         if (text.isEmpty()) return
         controller.updateInputText("")
+        prefsRepository.updateChatDraft("")
         controller.submitBridgeEvent(text, ConversationTurnSource.PhoneText)
     }
 
@@ -187,12 +227,13 @@ class AgentViewModel(
 
 class AgentViewModelFactory(
     private val application: Application,
-    private val controller: BridgeController
+    private val controller: BridgeController,
+    private val prefsRepository: com.example.hermesbridge.settings.AppPreferencesRepository
 ) : androidx.lifecycle.ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(AgentViewModel::class.java)) {
-            return AgentViewModel(application, controller) as T
+            return AgentViewModel(application, controller, prefsRepository) as T
         }
         throw IllegalArgumentException("Unknown ViewModel class")
     }

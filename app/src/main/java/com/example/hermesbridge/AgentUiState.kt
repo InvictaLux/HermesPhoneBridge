@@ -63,5 +63,8 @@ data class AgentUiState(
     val routeRecoveryAttempts: Int = 0,
     val screenOffLimitMinutes: Int = 60,
     val isAutoSpeakEnabled: Boolean = true,
-    val mediaState: MediaPlaybackState = MediaPlaybackState()
+    val mediaState: MediaPlaybackState = MediaPlaybackState(),
+    val diagnosticsExpanded: Boolean = false,
+    val wakeSensitivity: Float = 0.5f,
+    val wakeDebounceMs: Long = 1000L
 )

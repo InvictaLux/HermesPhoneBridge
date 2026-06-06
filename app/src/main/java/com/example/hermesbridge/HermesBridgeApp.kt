@@ -15,6 +15,7 @@ import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine
 import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator
 import com.example.hermesbridge.wakeword.WakeWordTestManager
 import com.example.hermesbridge.media.MediaCoexistenceManager
+import com.example.hermesbridge.settings.AppPreferencesRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
 
@@ -36,11 +37,13 @@ class HermesBridgeApp : Application() {
     lateinit var bridgeController: BridgeController
     lateinit var speechOutput: AndroidTtsSpeechOutput
     lateinit var mediaCoexistenceManager: MediaCoexistenceManager
+    lateinit var prefsRepository: AppPreferencesRepository
 
     override fun onCreate() {
         super.onCreate()
         Log.i("HermesApp", "Application onCreate")
 
+        prefsRepository = AppPreferencesRepository(this)
         metricsCollector = InteractionMetricsCollector(this)
         audioRouteManager = BluetoothAudioRouteManager(this)
         metaDatManager = MetaDatManager(this)
@@ -74,7 +77,8 @@ class HermesBridgeApp : Application() {
             speechToText,
             wakeWordManager,
             metricsCollector,
-            mediaCoexistenceManager
+            mediaCoexistenceManager,
+            prefsRepository
         )
 
         turnCoordinator = ConversationTurnCoordinator(

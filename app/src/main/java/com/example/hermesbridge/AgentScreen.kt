@@ -68,15 +68,14 @@ fun AgentScreen(
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsState()
-    var isDiagnosticsExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
             ConversationStatusHeader(
                 state = state,
-                isDiagnosticsExpanded = isDiagnosticsExpanded,
-                onToggleDiagnostics = { isDiagnosticsExpanded = !isDiagnosticsExpanded }
+                isDiagnosticsExpanded = state.diagnosticsExpanded,
+                onToggleDiagnostics = { viewModel.onToggleDiagnostics(!state.diagnosticsExpanded) }
             )
         },
         bottomBar = {
@@ -94,7 +93,7 @@ fun AgentScreen(
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            if (isDiagnosticsExpanded) {
+            if (state.diagnosticsExpanded) {
                 DiagnosticsPanel(
                     state = state,
                     viewModel = viewModel,
@@ -488,6 +487,48 @@ fun DiagnosticsPanel(
                 }
                 Button(onClick = { viewModel.onExportMetricsClicked() }, modifier = Modifier.fillMaxWidth()) {
                     Text("Export Summary", fontSize = 10.sp)
+                }
+            }
+        }
+
+        Text("App Data", style = MaterialTheme.typography.labelMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.onClearDraftClicked() }, modifier = Modifier.weight(1f)) {
+                Text("Clear Draft", fontSize = 10.sp)
+            }
+            Button(
+                onClick = { viewModel.onResetSettingsClicked() },
+                modifier = Modifier.weight(1f),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Reset All", fontSize = 10.sp)
+            }
+        }
+
+        Text("Wake Word Tuning", style = MaterialTheme.typography.labelMedium)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Sensitivity: ${"%.2f".format(state.wakeSensitivity)}", style = MaterialTheme.typography.bodySmall) 
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(0.3f, 0.5f, 0.7f).forEach { s ->
+                    Button(
+                        onClick = { viewModel.onSetWakeSensitivity(s) }, 
+                        modifier = Modifier.weight(1f),
+                        colors = if (state.wakeSensitivity == s) androidx.compose.material3.ButtonDefaults.buttonColors() else androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+                    ) {
+                        Text(s.toString(), fontSize = 10.sp)
+                    }
+                }
+            }
+            Text("Debounce: ${state.wakeDebounceMs}ms", style = MaterialTheme.typography.bodySmall)
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                listOf(750L, 1000L, 1500L).forEach { d ->
+                    Button(
+                        onClick = { viewModel.onSetWakeDebounce(d) }, 
+                        modifier = Modifier.weight(1f),
+                        colors = if (state.wakeDebounceMs == d) androidx.compose.material3.ButtonDefaults.buttonColors() else androidx.compose.material3.ButtonDefaults.outlinedButtonColors()
+                    ) {
+                        Text(d.toString(), fontSize = 10.sp)
+                    }
                 }
             }
         }

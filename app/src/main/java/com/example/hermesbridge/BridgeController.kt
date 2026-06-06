@@ -30,7 +30,8 @@ class BridgeController(
     private val speechToText: com.example.hermesbridge.speech.AndroidSpeechRecognizerInput,
     private val wakeWordManager: com.example.hermesbridge.wakeword.WakeWordTestManager,
     private val metricsCollector: com.example.hermesbridge.metrics.InteractionMetricsCollector,
-    private val mediaCoexistenceManager: com.example.hermesbridge.media.MediaCoexistenceManager
+    private val mediaCoexistenceManager: com.example.hermesbridge.media.MediaCoexistenceManager,
+    private val prefsRepository: com.example.hermesbridge.settings.AppPreferencesRepository
 ) {
     private val _uiState = MutableStateFlow(AgentUiState())
     val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()
@@ -42,7 +43,24 @@ class BridgeController(
         val savedApiUrl = sharedPrefs.getString(AppConfig.KEY_API_URL, AppConfig.DEFAULT_BASE_URL) ?: AppConfig.DEFAULT_BASE_URL
         val savedDeviceId = sharedPrefs.getString(AppConfig.KEY_DEVICE_ID, AppConfig.DEFAULT_DEVICE_ID) ?: AppConfig.DEFAULT_DEVICE_ID
         startNewSession(savedApiUrl, savedDeviceId)
+        applyPersistedSettings()
         startObserving()
+    }
+
+    private fun applyPersistedSettings() {
+        val s = prefsRepository.settings.value
+        _uiState.update { it.copy(
+            isAutoSpeakEnabled = s.isAutoSpeakEnabled,
+            diagnosticsExpanded = s.diagnosticsExpanded,
+            inputText = s.unsentChatDraft,
+            screenOffLimitMinutes = s.screenOffRuntimeLimitMinutes,
+            wakeSensitivity = s.wakeSensitivity,
+            wakeDebounceMs = s.wakeDebounceMs
+        )}
+        mediaCoexistenceManager.setAutoPauseEnabled(s.mediaAutoPauseEnabled)
+        mediaCoexistenceManager.setResumePolicy(s.mediaResumePolicy)
+        wakeWordManager.setSensitivity(s.wakeSensitivity)
+        wakeWordManager.setDebounce(s.wakeDebounceMs)
     }
 
     private fun startObserving() {
@@ -273,5 +291,19 @@ class BridgeController(
 
     fun updateInputText(text: String) {
         _uiState.update { it.copy(inputText = text) }
+    }
+
+    fun updateDiagnosticsExpanded(expanded: Boolean) {
+        _uiState.update { it.copy(diagnosticsExpanded = expanded) }
+    }
+
+    fun updateWakeSensitivity(sensitivity: Float) {
+        _uiState.update { it.copy(wakeSensitivity = sensitivity) }
+        wakeWordManager.setSensitivity(sensitivity)
+    }
+
+    fun updateWakeDebounce(ms: Long) {
+        _uiState.update { it.copy(wakeDebounceMs = ms) }
+        wakeWordManager.setDebounce(ms)
     }
 }
