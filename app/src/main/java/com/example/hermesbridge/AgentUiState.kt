@@ -17,6 +17,7 @@ import com.example.hermesbridge.metrics.WakeReliabilityStats
 import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.BatterySnapshot
 import com.example.hermesbridge.service.WakeServiceState
+import com.example.hermesbridge.media.MediaPlaybackState
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -61,5 +62,6 @@ data class AgentUiState(
     val sessionRecoveryAttempts: Int = 0,
     val routeRecoveryAttempts: Int = 0,
     val screenOffLimitMinutes: Int = 60,
-    val isAutoSpeakEnabled: Boolean = true
+    val isAutoSpeakEnabled: Boolean = true,
+    val mediaState: MediaPlaybackState = MediaPlaybackState()
 )

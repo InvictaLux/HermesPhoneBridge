@@ -1,7 +1,7 @@
 package com.example.hermesbridge.conversation
 
 import android.util.Log
-import com.example.hermesbridge.AgentViewModel
+import com.example.hermesbridge.BridgeController
 import com.example.hermesbridge.audio.BluetoothAudioRouteManager
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.bridge.MetaWearableInputSource
@@ -20,12 +20,13 @@ import kotlinx.coroutines.launch
 
 class ConversationTurnCoordinator(
     private val scope: CoroutineScope,
-    private val viewModel: AgentViewModel,
+    private val controller: BridgeController,
     val metaDatManager: MetaDatManager,
     private val audioRouteManager: BluetoothAudioRouteManager,
     private val speechToText: AndroidSpeechRecognizerInput,
     private val wearableInputSource: MetaWearableInputSource,
-    private val metricsCollector: InteractionMetricsCollector? = null
+    private val metricsCollector: InteractionMetricsCollector? = null,
+    private val mediaManager: com.example.hermesbridge.media.MediaCoexistenceManager? = null
 ) {
     private val _turnState = MutableStateFlow<ConversationTurnState>(ConversationTurnState.Idle)
     val turnState: StateFlow<ConversationTurnState> = _turnState.asStateFlow()
@@ -62,9 +63,9 @@ class ConversationTurnCoordinator(
                 }
             }
 
-            // Monitor backend loading state
+            // Monitor backend loading state via controller
             launch {
-                viewModel.uiState.collect { state ->
+                controller.uiState.collect { state ->
                     val current = _turnState.value
                     if (current is ConversationTurnState.Sending && !state.isLoading) {
                         if (state.errorMessage != null) {
@@ -96,7 +97,14 @@ class ConversationTurnCoordinator(
             audioRouteManager.startBluetoothRoute()
         }
 
-        viewModel.stopSpeaking()
+        if (mediaManager?.requestPauseBeforeTurn() == false) {
+            Log.w("HermesTurn", "Media pause requested but failed or manual pause required.")
+            // Proceed anyway if it was just a policy warning, but for prototype we can show error
+            // endTurnWithError("Pause media before speaking")
+            // return
+        }
+
+        controller.stopSpeaking()
         speechToText.stopListening()
 
         metricsCollector?.recordLatencyEvent { it.speechRecognizerStart = SystemClock.elapsedRealtime() }
@@ -119,10 +127,13 @@ class ConversationTurnCoordinator(
         metricsCollector?.recordLatencyEvent { it.backendResponseReceived = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.Speaking
         metricsCollector?.recordLatencyEvent { it.ttsStart = SystemClock.elapsedRealtime() }
-        viewModel.speakResponse(text) {
+        controller.speakResponse(text) {
             metricsCollector?.recordLatencyEvent { it.ttsComplete = SystemClock.elapsedRealtime() }
             _turnState.value = ConversationTurnState.Completed
             metricsCollector?.takeBatterySnapshot("TurnCompleted")
+            
+            mediaManager?.handleTurnCompletion()
+
             scope.launch {
                 kotlinx.coroutines.delay(1000)
                 resetToIdle()
@@ -133,7 +144,7 @@ class ConversationTurnCoordinator(
     fun cancelTurn() {
         Log.i("HermesTurn", "Turn canceled by user")
         speechToText.stopListening()
-        viewModel.stopSpeaking()
+        controller.stopSpeaking()
         _turnState.value = ConversationTurnState.Canceled
         scope.launch {
             kotlinx.coroutines.delay(1000)

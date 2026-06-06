@@ -48,6 +48,10 @@ sealed class UiCommand {
     object ExportMetrics : UiCommand()
     object TogglePauseWake : UiCommand()
     data class SetScreenOffLimit(val mins: Int) : UiCommand()
+    object ManualMediaPause : UiCommand()
+    object ManualMediaResume : UiCommand()
+    object ToggleMediaAutoPause : UiCommand()
+    data class SetMediaResumePolicy(val policy: com.example.hermesbridge.media.MediaResumePolicy) : UiCommand()
 }
 
 class AgentViewModel(
@@ -120,6 +124,13 @@ class AgentViewModel(
         viewModelScope.launch {
             _commands.emit(UiCommand.SetScreenOffLimit(mins))
         }
+    }
+
+    fun onManualMediaPauseClicked() { viewModelScope.launch { _commands.emit(UiCommand.ManualMediaPause) } }
+    fun onManualMediaResumeClicked() { viewModelScope.launch { _commands.emit(UiCommand.ManualMediaResume) } }
+    fun onToggleMediaAutoPause() { viewModelScope.launch { _commands.emit(UiCommand.ToggleMediaAutoPause) } }
+    fun onSetMediaResumePolicy(policy: com.example.hermesbridge.media.MediaResumePolicy) { 
+        viewModelScope.launch { _commands.emit(UiCommand.SetMediaResumePolicy(policy)) }
     }
 
     fun onToggleAutoSpeakClicked() {

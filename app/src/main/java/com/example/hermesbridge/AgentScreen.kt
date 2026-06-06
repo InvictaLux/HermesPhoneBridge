@@ -440,6 +440,25 @@ fun DiagnosticsPanel(
             }
         }
 
+        Text("Media Coexistence", style = MaterialTheme.typography.labelMedium)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Switch(
+                checked = state.mediaState.isAutoPauseEnabled,
+                onCheckedChange = { viewModel.onToggleMediaAutoPause() }
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Auto-pause media", style = MaterialTheme.typography.bodySmall)
+        }
+        Text("Status: ${state.mediaState.status}", style = MaterialTheme.typography.bodySmall)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { viewModel.onManualMediaPauseClicked() }, modifier = Modifier.weight(1f)) {
+                Text("Pause", fontSize = 10.sp)
+            }
+            Button(onClick = { viewModel.onManualMediaResumeClicked() }, modifier = Modifier.weight(1f)) {
+                Text("Resume", fontSize = 10.sp)
+            }
+        }
+
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)

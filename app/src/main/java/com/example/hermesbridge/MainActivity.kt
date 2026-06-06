@@ -101,11 +101,15 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.StopWakeWordTest -> app.wakeWordManager.stopTest()
                     is UiCommand.EnableWakeMode -> startWakeService()
                     is UiCommand.DisableWakeMode -> stopWakeService()
-                    is UiCommand.MarkMissedWake -> app.metricsCollector.onMissedDetection()
+                    is UiCommand.MarkMissedWake -> app.bridgeController.onMissedDetection()
                     is UiCommand.ResetMetrics -> app.metricsCollector.resetMetrics()
                     is UiCommand.ExportMetrics -> exportMetrics()
                     is UiCommand.TogglePauseWake -> togglePauseWake()
                     is UiCommand.SetScreenOffLimit -> app.bridgeController.updateScreenOffLimit(command.mins)
+                    is UiCommand.ManualMediaPause -> app.mediaCoexistenceManager.manualPause()
+                    is UiCommand.ManualMediaResume -> app.mediaCoexistenceManager.manualResume()
+                    is UiCommand.ToggleMediaAutoPause -> app.mediaCoexistenceManager.setAutoPauseEnabled(!app.bridgeController.uiState.value.mediaState.isAutoPauseEnabled)
+                    is UiCommand.SetMediaResumePolicy -> app.mediaCoexistenceManager.setResumePolicy(command.policy)
                 }
             }
         }

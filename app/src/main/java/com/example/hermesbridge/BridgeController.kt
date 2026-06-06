@@ -6,6 +6,7 @@ import com.example.hermesbridge.conversation.*
 import com.example.hermesbridge.metrics.BatterySnapshot
 import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.WakeReliabilityStats
+import com.example.hermesbridge.media.MediaPlaybackState
 import com.example.hermesbridge.service.WakeServiceState
 import com.example.hermesbridge.speech.SpeechOutput
 import com.example.hermesbridge.wakeword.WakeWordDetection
@@ -28,7 +29,8 @@ class BridgeController(
     private val audioRouteManager: com.example.hermesbridge.audio.BluetoothAudioRouteManager,
     private val speechToText: com.example.hermesbridge.speech.AndroidSpeechRecognizerInput,
     private val wakeWordManager: com.example.hermesbridge.wakeword.WakeWordTestManager,
-    private val metricsCollector: com.example.hermesbridge.metrics.InteractionMetricsCollector
+    private val metricsCollector: com.example.hermesbridge.metrics.InteractionMetricsCollector,
+    private val mediaCoexistenceManager: com.example.hermesbridge.media.MediaCoexistenceManager
 ) {
     private val _uiState = MutableStateFlow(AgentUiState())
     val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()
@@ -82,8 +84,12 @@ class BridgeController(
             metricsCollector.lastLatency.collect { l -> updateLastLatency(l) }
         }
         scope.launch {
+            mediaCoexistenceManager.playbackState.collect { s -> updateMediaState(s) }
+        }
+        scope.launch {
             while (isActive) {
                 updateBtUptime(metricsCollector.getBluetoothUptimeMs())
+                mediaCoexistenceManager.updateStatus()
                 delay(1000)
             }
         }
@@ -246,6 +252,8 @@ class BridgeController(
     fun updateScreenOffLimit(mins: Int) { _uiState.update { it.copy(screenOffLimitMinutes = mins) } }
     
     fun updateAutoSpeak(enabled: Boolean) { _uiState.update { it.copy(isAutoSpeakEnabled = enabled) } }
+
+    fun updateMediaState(s: MediaPlaybackState) { _uiState.update { it.copy(mediaState = s) } }
 
     fun onTrueDetection() {
         metricsCollector.onTrueDetection()
