@@ -312,6 +312,26 @@ fun AgentScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { viewModel.onToggleWakeModeClicked() },
+                    modifier = Modifier.weight(1f),
+                    colors = if (state.isWakeModeEnabled) 
+                        androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                        else androidx.compose.material3.ButtonDefaults.buttonColors()
+                ) {
+                    Text(if (state.isWakeModeEnabled) "Disable Wake Mode" else "Enable Wake Mode")
+                }
+            }
+
+            Text(
+                text = "Wake Mode: ${if (state.isWakeModeEnabled) "Active" else "Disabled"}",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (state.isWakeModeEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
             Text(
                 text = "Wake Word Offline Smoke Test",
                 style = MaterialTheme.typography.labelMedium,

@@ -51,6 +51,8 @@ sealed class UiCommand {
     object NewSession : UiCommand()
     object StartWakeWordTest : UiCommand()
     object StopWakeWordTest : UiCommand()
+    object EnableWakeMode : UiCommand()
+    object DisableWakeMode : UiCommand()
 }
 
 class AgentViewModel(
@@ -179,6 +181,20 @@ class AgentViewModel(
 
     fun updateLastWakeDetection(detection: WakeWordDetection?) {
         _uiState.update { it.copy(lastWakeDetection = detection) }
+    }
+
+    fun updateWakeModeEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(isWakeModeEnabled = enabled) }
+    }
+
+    fun onToggleWakeModeClicked() {
+        viewModelScope.launch {
+            if (_uiState.value.isWakeModeEnabled) {
+                _commands.emit(UiCommand.DisableWakeMode)
+            } else {
+                _commands.emit(UiCommand.EnableWakeMode)
+            }
+        }
     }
 
     fun onStartWakeWordTestClicked() {

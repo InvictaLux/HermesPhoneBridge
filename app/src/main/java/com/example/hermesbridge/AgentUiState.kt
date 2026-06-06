@@ -47,5 +47,6 @@ data class AgentUiState(
     val wakeWordStatus: WakeWordStatus = WakeWordStatus.Idle,
     val lastWakeDetection: WakeWordDetection? = null,
     val trueDetectionCount: Int = 0,
-    val falseTriggerCount: Int = 0
+    val falseTriggerCount: Int = 0,
+    val isWakeModeEnabled: Boolean = false
 )

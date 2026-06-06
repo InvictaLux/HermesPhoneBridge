@@ -21,6 +21,7 @@ import com.example.hermesbridge.audio.PcmCaptureManager
 import com.example.hermesbridge.conversation.ConversationTurnCoordinator
 import com.example.hermesbridge.trigger.MetaWearableTurnTrigger
 import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine
+import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator
 import com.example.hermesbridge.wakeword.WakeWordTestManager
 import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput
 import com.example.hermesbridge.speech.AndroidTtsSpeechOutput
@@ -41,6 +42,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var turnCoordinator: ConversationTurnCoordinator
     private lateinit var turnTrigger: MetaWearableTurnTrigger
     private lateinit var wakeWordManager: WakeWordTestManager
+    private lateinit var wakeTurnCoordinator: WakeWordConversationCoordinator
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -91,6 +93,13 @@ class MainActivity : ComponentActivity() {
         wakeWordManager = WakeWordTestManager(this, porcupineEngine) {
             audioRouteManager.isRoutingToBluetooth()
         }
+
+        wakeTurnCoordinator = WakeWordConversationCoordinator(
+            lifecycleScope,
+            viewModel,
+            wakeWordManager,
+            turnCoordinator
+        )
 
         // 1. Initialize Inputs and Repositories
         val phoneInputSource = PhoneTextInputSource()
@@ -190,6 +199,12 @@ class MainActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
+            wakeTurnCoordinator.isWakeModeEnabled.collect { enabled ->
+                viewModel.updateWakeModeEnabled(enabled)
+            }
+        }
+
+        lifecycleScope.launch {
             wakeWordManager.status.collect { status ->
                 Log.d("HermesBridge", "Wake Word Status Update: $status")
                 viewModel.updateWakeWordStatus(status)
@@ -269,6 +284,12 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.StopWakeWordTest -> {
                         wakeWordManager.stopTest()
                     }
+                    is UiCommand.EnableWakeMode -> {
+                        wakeTurnCoordinator.setWakeModeEnabled(true)
+                    }
+                    is UiCommand.DisableWakeMode -> {
+                        wakeTurnCoordinator.setWakeModeEnabled(false)
+                    }
                 }
             }
         }
@@ -322,6 +343,10 @@ class MainActivity : ComponentActivity() {
         super.onStop()
         // Stop speaking immediately when backgrounded
         viewModel.stopSpeaking()
+        // Stop wake detection when backgrounded (Gate 10E Task 7)
+        if (::wakeTurnCoordinator.isInitialized) {
+            wakeTurnCoordinator.setWakeModeEnabled(false)
+        }
     }
 
     override fun onDestroy() {
@@ -349,6 +374,9 @@ class MainActivity : ComponentActivity() {
         }
         if (::wakeWordManager.isInitialized) {
             wakeWordManager.release()
+        }
+        if (::wakeTurnCoordinator.isInitialized) {
+            wakeTurnCoordinator.stop()
         }
         wearableInputSource.stop()
         speechOutput?.shutdown()
