@@ -18,6 +18,9 @@ import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.BatterySnapshot
 import com.example.hermesbridge.service.WakeServiceState
 import com.example.hermesbridge.media.MediaPlaybackState
+import com.example.hermesbridge.onboarding.OnboardingStep
+import com.example.hermesbridge.onboarding.StepStatus
+import com.example.hermesbridge.serviceentry.ServiceVisitState
 
 data class AgentUiState(
     val apiUrl: String = AppConfig.DEFAULT_BASE_URL,
@@ -66,5 +69,10 @@ data class AgentUiState(
     val mediaState: MediaPlaybackState = MediaPlaybackState(),
     val diagnosticsExpanded: Boolean = false,
     val wakeSensitivity: Float = 0.5f,
-    val wakeDebounceMs: Long = 1000L
+    val wakeDebounceMs: Long = 1000L,
+    val currentScreen: AppScreen = AppScreen.Home,
+    val isOnboardingCompleted: Boolean = false,
+    val currentOnboardingStep: OnboardingStep = OnboardingStep.Welcome,
+    val onboardingStepStatus: Map<OnboardingStep, StepStatus> = emptyMap(),
+    val serviceVisit: ServiceVisitState = ServiceVisitState()
 )

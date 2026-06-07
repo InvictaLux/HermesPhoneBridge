@@ -55,12 +55,41 @@ class BridgeController(
             inputText = s.unsentChatDraft,
             screenOffLimitMinutes = s.screenOffRuntimeLimitMinutes,
             wakeSensitivity = s.wakeSensitivity,
-            wakeDebounceMs = s.wakeDebounceMs
+            wakeDebounceMs = s.wakeDebounceMs,
+            isOnboardingCompleted = s.isOnboardingCompleted
         )}
         mediaCoexistenceManager.setAutoPauseEnabled(s.mediaAutoPauseEnabled)
         mediaCoexistenceManager.setResumePolicy(s.mediaResumePolicy)
         wakeWordManager.setSensitivity(s.wakeSensitivity)
         wakeWordManager.setDebounce(s.wakeDebounceMs)
+    }
+
+    fun completeOnboarding() {
+        prefsRepository.updateOnboardingCompleted(true)
+        _uiState.update { it.copy(isOnboardingCompleted = true) }
+    }
+
+    fun resetOnboarding() {
+        prefsRepository.updateOnboardingCompleted(false)
+        _uiState.update { it.copy(isOnboardingCompleted = false, currentOnboardingStep = com.example.hermesbridge.onboarding.OnboardingStep.Welcome) }
+    }
+
+    fun nextOnboardingStep() {
+        val current = _uiState.value.currentOnboardingStep
+        val next = com.example.hermesbridge.onboarding.OnboardingStep.entries.getOrNull(current.ordinal + 1)
+        if (next != null) {
+            _uiState.update { it.copy(currentOnboardingStep = next) }
+        } else {
+            completeOnboarding()
+        }
+    }
+
+    fun previousOnboardingStep() {
+        val current = _uiState.value.currentOnboardingStep
+        val prev = com.example.hermesbridge.onboarding.OnboardingStep.entries.getOrNull(current.ordinal - 1)
+        if (prev != null) {
+            _uiState.update { it.copy(currentOnboardingStep = prev) }
+        }
     }
 
     private fun startObserving() {
@@ -273,6 +302,8 @@ class BridgeController(
 
     fun updateMediaState(s: MediaPlaybackState) { _uiState.update { it.copy(mediaState = s) } }
 
+    fun updateServiceVisit(s: com.example.hermesbridge.serviceentry.ServiceVisitState) { _uiState.update { it.copy(serviceVisit = s) } }
+
     fun onTrueDetection() {
         metricsCollector.onTrueDetection()
     }
@@ -295,6 +326,10 @@ class BridgeController(
 
     fun updateDiagnosticsExpanded(expanded: Boolean) {
         _uiState.update { it.copy(diagnosticsExpanded = expanded) }
+    }
+
+    fun navigateTo(screen: AppScreen) {
+        _uiState.update { it.copy(currentScreen = screen) }
     }
 
     fun updateWakeSensitivity(sensitivity: Float) {

@@ -77,4 +77,6 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.meta.wearables.dat.core)
     implementation(libs.porcupine.android)
+    implementation(libs.play.services.location)
+    implementation(libs.kotlinx.coroutines.play.services)
 }

@@ -11,5 +11,6 @@ data class PersistedAppSettings(
     val screenOffRuntimeLimitMinutes: Int = 60,
     val diagnosticsExpanded: Boolean = false,
     val unsentChatDraft: String = "",
-    val longRunTestDurationMinutes: Int = 30
+    val longRunTestDurationMinutes: Int = 30,
+    val isOnboardingCompleted: Boolean = false
 )

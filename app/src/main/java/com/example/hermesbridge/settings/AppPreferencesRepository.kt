@@ -24,8 +24,14 @@ class AppPreferencesRepository(context: Context) {
             screenOffRuntimeLimitMinutes = prefs.getInt("screenOffRuntimeLimitMinutes", 60),
             diagnosticsExpanded = prefs.getBoolean("diagnosticsExpanded", false),
             unsentChatDraft = prefs.getString("unsentChatDraft", "") ?: "",
-            longRunTestDurationMinutes = prefs.getInt("longRunTestDurationMinutes", 30)
+            longRunTestDurationMinutes = prefs.getInt("longRunTestDurationMinutes", 30),
+            isOnboardingCompleted = prefs.getBoolean("isOnboardingCompleted", false)
         )
+    }
+
+    fun updateOnboardingCompleted(completed: Boolean) {
+        prefs.edit().putBoolean("isOnboardingCompleted", completed).apply()
+        _settings.update { it.copy(isOnboardingCompleted = completed) }
     }
 
     fun updateAutoSpeak(enabled: Boolean) {

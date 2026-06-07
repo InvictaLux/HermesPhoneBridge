@@ -135,6 +135,22 @@ class MainActivity : ComponentActivity() {
                         app.prefsRepository.updateChatDraft("")
                         app.bridgeController.updateInputText("")
                     }
+                    is UiCommand.TriggerLocationHandshake -> {
+                        app.serviceVisitCoordinator.simulateMcCulloughArrival()
+                    }
+                    is UiCommand.DetectCurrentPool -> {
+                        app.serviceVisitCoordinator.startLocationDetection()
+                    }
+                    is UiCommand.SyncRoute -> {
+                        app.serviceVisitCoordinator.syncRoute()
+                    }
+                    is UiCommand.SelectPool -> {
+                        app.serviceVisitCoordinator.onPoolSelected(command.pool)
+                    }
+                    is UiCommand.CompleteOnboarding -> app.bridgeController.completeOnboarding()
+                    is UiCommand.ResetOnboarding -> app.bridgeController.resetOnboarding()
+                    is UiCommand.NextOnboardingStep -> app.bridgeController.nextOnboardingStep()
+                    is UiCommand.PreviousOnboardingStep -> app.bridgeController.previousOnboardingStep()
                 }
             }
         }
@@ -142,6 +158,9 @@ class MainActivity : ComponentActivity() {
         // Hardware trigger
         turnTrigger.setListener { app.turnCoordinator.startWearableTurn() }
         turnTrigger.start()
+
+        // Sync route on startup
+        app.serviceVisitCoordinator.syncRoute()
 
         // Sync coordinators with global state loop (already happening in components)
         

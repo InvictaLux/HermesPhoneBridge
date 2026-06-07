@@ -15,6 +15,8 @@ import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine
 import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator
 import com.example.hermesbridge.wakeword.WakeWordTestManager
 import com.example.hermesbridge.media.MediaCoexistenceManager
+import com.example.hermesbridge.location.PoolLocationManager
+import com.example.hermesbridge.serviceentry.ServiceVisitCoordinator
 import com.example.hermesbridge.settings.AppPreferencesRepository
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collect
@@ -31,6 +33,8 @@ class HermesBridgeApp : Application() {
     lateinit var wakeWordManager: WakeWordTestManager
     lateinit var turnCoordinator: ConversationTurnCoordinator
     lateinit var wakeTurnCoordinator: WakeWordConversationCoordinator
+    lateinit var serviceVisitCoordinator: ServiceVisitCoordinator
+    lateinit var locationManager: PoolLocationManager
     
     lateinit var repository: AgentRepository
     lateinit var phoneInputSource: PhoneTextInputSource
@@ -50,6 +54,7 @@ class HermesBridgeApp : Application() {
         wearableInputSource = MetaWearableInputSource()
         phoneInputSource = PhoneTextInputSource()
         mediaCoexistenceManager = MediaCoexistenceManager(this)
+        locationManager = PoolLocationManager(this)
         
         speechToText = AndroidSpeechRecognizerInput(this) {
             audioRouteManager.isRoutingToBluetooth()
@@ -92,6 +97,13 @@ class HermesBridgeApp : Application() {
             mediaCoexistenceManager
         )
 
+        serviceVisitCoordinator = ServiceVisitCoordinator(
+            applicationScope,
+            bridgeController,
+            repository,
+            locationManager
+        )
+
         wakeTurnCoordinator = WakeWordConversationCoordinator(
             applicationScope,
             bridgeController,
@@ -101,11 +113,15 @@ class HermesBridgeApp : Application() {
         )
         
         wearableInputSource.setListener { event ->
-            bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.MetaWearableVoice)
+            if (!serviceVisitCoordinator.handleInput(event.text)) {
+                bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.MetaWearableVoice)
+            }
         }
         
         phoneInputSource.setListener { event ->
-            bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.PhoneText)
+            if (!serviceVisitCoordinator.handleInput(event.text)) {
+                bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.PhoneText)
+            }
         }
         
         phoneInputSource.start()

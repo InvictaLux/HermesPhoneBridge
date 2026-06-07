@@ -1,0 +1,1521 @@
+[1mdiff --git a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml[m
+[1mindex b97c999..b0947dd 100644[m
+[1m--- a/app/src/main/AndroidManifest.xml[m
+[1m+++ b/app/src/main/AndroidManifest.xml[m
+[36m@@ -10,11 +10,15 @@[m
+     <uses-permission android:name="android.permission.RECORD_AUDIO" />[m
+     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />[m
+     <uses-permission android:name="android.permission.CAMERA" />[m
+[32m+[m[32m    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />[m
+[32m+[m[32m    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />[m
+[32m+[m[32m    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />[m
+ [m
+     <uses-feature android:name="android.hardware.camera" android:required="false" />[m
+     <uses-feature android:name="android.hardware.bluetooth" android:required="false" />[m
+ [m
+     <application[m
+[32m+[m[32m        android:name=".HermesBridgeApp"[m
+         android:allowBackup="true"[m
+         android:icon="@android:drawable/sym_def_app_icon"[m
+         android:label="Hermes Bridge"[m
+[36m@@ -52,6 +56,12 @@[m
+                 <data android:scheme="${metaCallbackScheme}" />[m
+             </intent-filter>[m
+         </activity>[m
+[32m+[m
+[32m+[m[32m        <service[m
+[32m+[m[32m            android:name=".service.WakeWordForegroundService"[m
+[32m+[m[32m            android:enabled="true"[m
+[32m+[m[32m            android:exported="false"[m
+[32m+[m[32m            android:foregroundServiceType="microphone" />[m
+     </application>[m
+ [m
+ </manifest>[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/AgentViewModel.kt b/app/src/main/java/com/example/hermesbridge/AgentViewModel.kt[m
+[1mindex 35649b2..74ee30e 100644[m
+[1m--- a/app/src/main/java/com/example/hermesbridge/AgentViewModel.kt[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/AgentViewModel.kt[m
+[36m@@ -1,12 +1,8 @@[m
+ package com.example.hermesbridge[m
+ [m
+ import android.app.Application[m
+[31m-import android.content.Context[m
+[31m-import android.util.Log[m
+ import androidx.lifecycle.AndroidViewModel[m
+ import androidx.lifecycle.viewModelScope[m
+[31m-import com.example.hermesbridge.bridge.InputSource[m
+[31m-import com.example.hermesbridge.bridge.PhoneTextInputSource[m
+ import com.example.hermesbridge.conversation.*[m
+ import com.example.hermesbridge.meta.MetaDatStatus[m
+ import com.example.hermesbridge.meta.MetaCapabilityStatus[m
+[36m@@ -14,7 +10,6 @@[m [mimport com.example.hermesbridge.meta.MetaAudioCapabilityInfo[m
+ import com.example.hermesbridge.audio.BluetoothAudioRouteStatus[m
+ import com.example.hermesbridge.audio.PcmCaptureStatus[m
+ import com.example.hermesbridge.audio.PcmCaptureResult[m
+[31m-import com.example.hermesbridge.speech.SpeechOutput[m
+ import com.example.hermesbridge.speech.SpeechRecognitionStatus[m
+ import com.example.hermesbridge.speech.SpeechRecognitionResult[m
+ import com.example.hermesbridge.trigger.WearableTriggerStatus[m
+[36m@@ -24,18 +19,10 @@[m [mimport com.example.hermesbridge.metrics.WakeReliabilityStats[m
+ import com.example.hermesbridge.metrics.LatencyBreakdown[m
+ import com.example.hermesbridge.metrics.BatterySnapshot[m
+ import kotlinx.coroutines.flow.MutableSharedFlow[m
+[31m-import kotlinx.coroutines.flow.MutableStateFlow[m
+ import kotlinx.coroutines.flow.SharedFlow[m
+ import kotlinx.coroutines.flow.StateFlow[m
+ import kotlinx.coroutines.flow.asSharedFlow[m
+[31m-import kotlinx.coroutines.flow.asStateFlow[m
+[31m-import kotlinx.coroutines.flow.update[m
+ import kotlinx.coroutines.launch[m
+[31m-import java.text.SimpleDateFormat[m
+[31m-import java.util.Date[m
+[31m-import java.util.Locale[m
+[31m-import java.util.TimeZone[m
+[31m-import java.util.UUID[m
+ [m
+ sealed class UiCommand {[m
+     object LaunchMetaDatRegistration : UiCommand()[m
+[36m@@ -63,155 +50,17 @@[m [msealed class UiCommand {[m
+ [m
+ class AgentViewModel([m
+     application: Application,[m
+[31m-    private val repository: AgentRepository,[m
+[31m-    private val inputSource: InputSource[m
+[32m+[m[32m    private val controller: BridgeController[m
+ ) : AndroidViewModel(application) {[m
+ [m
+[31m-    private val _uiState = MutableStateFlow(AgentUiState())[m
+[31m-    val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()[m
+[32m+[m[32m    val uiState: StateFlow<AgentUiState> = controller.uiState[m
+ [m
+     private val _commands = MutableSharedFlow<UiCommand>()[m
+     val commands: SharedFlow<UiCommand> = _commands.asSharedFlow()[m
+ [m
+[31m-    private val sharedPrefs = application.getSharedPreferences([m
+[31m-        AppConfig.PREFS_NAME,[m
+[31m-        Context.MODE_PRIVATE[m
+[31m-    )[m
+[31m-[m
+[31m-    private var speechOutput: SpeechOutput? = null[m
+[31m-    private val MAX_HISTORY = 20[m
+[31m-[m
+[31m-    init {[m
+[31m-        // Load configurations from persistence[m
+[31m-        val savedApiUrl = sharedPrefs.getString(AppConfig.KEY_API_URL, AppConfig.DEFAULT_BASE_URL) ?: AppConfig.DEFAULT_BASE_URL[m
+[31m-        [m
+[31m-        // Ensure consistent device ID[m
+[31m-        val hasDeviceId = sharedPrefs.contains(AppConfig.KEY_DEVICE_ID)[m
+[31m-        val savedDeviceId = if (hasDeviceId) {[m
+[31m-            sharedPrefs.getString(AppConfig.KEY_DEVICE_ID, AppConfig.DEFAULT_DEVICE_ID) ?: AppConfig.DEFAULT_DEVICE_ID[m
+[31m-        } else {[m
+[31m-            val defaultId = AppConfig.DEFAULT_DEVICE_ID[m
+[31m-            sharedPrefs.edit().putString(AppConfig.KEY_DEVICE_ID, defaultId).apply()[m
+[31m-            defaultId[m
+[31m-        }[m
+[31m-[m
+[31m-        // Initialize Session ID[m
+[31m-        startNewSession(savedApiUrl, savedDeviceId)[m
+[31m-[m
+[31m-        // Connect the InputSource text emissions to the transmission pipeline[m
+[31m-        inputSource.setListener { event ->[m
+[31m-            val source = if (event.source == "phone_text") ConversationTurnSource.PhoneText else ConversationTurnSource.MetaWearableVoice[m
+[31m-            submitNewTurn(event.text, source)[m
+[31m-        }[m
+[31m-        inputSource.start()[m
+[31m-    }[m
+[31m-[m
+[31m-    fun startNewSession(apiUrl: String? = null, deviceId: String? = null) {[m
+[31m-        val newSessionId = "phone-session-${UUID.randomUUID().toString().substring(0, 8)}"[m
+[31m-        val url = apiUrl ?: _uiState.value.apiUrl[m
+[31m-        val dId = deviceId ?: _uiState.value.deviceId[m
+[31m-[m
+[31m-        _uiState.update {[m
+[31m-            it.copy([m
+[31m-                apiUrl = url,[m
+[31m-                deviceId = dId,[m
+[31m-                sessionId = newSessionId,[m
+[31m-                conversationHistory = emptyList(),[m
+[31m-                currentTurnId = null,[m
+[31m-                latestResponse = "",[m
+[31m-                errorMessage = null,[m
+[31m-                inputSourceName = if (inputSource is PhoneTextInputSource) "On-Screen Keyboard" else "External Source",[m
+[31m-                inputSourceType = if (inputSource is PhoneTextInputSource) "phone_text" else "unknown"[m
+[31m-            )[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    // Configures the voice output engine (AndroidTtsSpeechOutput)[m
+[31m-    fun setSpeechOutput(output: SpeechOutput) {[m
+[31m-        this.speechOutput = output[m
+[31m-        _uiState.update { it.copy(isTtsReady = true) }[m
+[31m-    }[m
+[31m-[m
+[31m-    // Dynamic field updates[m
+[31m-    fun updateMetaDatStatus(newStatus: MetaDatStatus) {[m
+[31m-        _uiState.update { it.copy(metaDatStatus = newStatus) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateMetaDatMessage(message: String?) {[m
+[31m-        _uiState.update { it.copy(metaDatMessage = message) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updatePermissionMessage(message: String?) {[m
+[31m-        _uiState.update { it.copy(permissionMessage = message) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateMetaCapabilities(capabilities: MetaCapabilityStatus) {[m
+[31m-        _uiState.update { it.copy(metaCapabilities = capabilities) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateMetaAudioInfo(audioInfo: MetaAudioCapabilityInfo) {[m
+[31m-        _uiState.update { it.copy(metaAudioInfo = audioInfo) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updatePcmCaptureStatus(status: PcmCaptureStatus) {[m
+[31m-        _uiState.update { it.copy(pcmCaptureStatus = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updatePcmCaptureResult(result: PcmCaptureResult) {[m
+[31m-        _uiState.update { it.copy(pcmCaptureResult = result) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateSpeechStatus(status: SpeechRecognitionStatus) {[m
+[31m-        _uiState.update { it.copy(speechStatus = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateSpeechResult(result: SpeechRecognitionResult) {[m
+[31m-        _uiState.update { it.copy(speechResult = result) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateAudioRouteStatus(status: BluetoothAudioRouteStatus) {[m
+[31m-        _uiState.update { it.copy(audioRouteStatus = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateConversationTurnState(status: ConversationTurnState) {[m
+[31m-        _uiState.update { it.copy(turnState = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateTriggerStatus(status: WearableTriggerStatus) {[m
+[31m-        _uiState.update { it.copy(triggerStatus = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateWakeWordStatus(status: WakeWordStatus) {[m
+[31m-        _uiState.update { it.copy(wakeWordStatus = status) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateLastWakeDetection(detection: WakeWordDetection?) {[m
+[31m-        _uiState.update { it.copy(lastWakeDetection = detection) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateWakeModeEnabled(enabled: Boolean) {[m
+[31m-        _uiState.update { it.copy(isWakeModeEnabled = enabled) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateReliabilityStats(stats: WakeReliabilityStats) {[m
+[31m-        _uiState.update { it.copy(reliabilityStats = stats) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateLastLatency(latency: LatencyBreakdown) {[m
+[31m-        _uiState.update { it.copy(lastLatency = latency) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateBatterySnapshot(snapshot: BatterySnapshot) {[m
+[31m-        _uiState.update { it.copy(batterySnapshot = snapshot) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateBtUptime(uptimeMs: Long) {[m
+[31m-        _uiState.update { it.copy(btUptimeMs = uptimeMs) }[m
+[31m-    }[m
+[31m-[m
+     fun onToggleWakeModeClicked() {[m
+         viewModelScope.launch {[m
+[31m-            if (_uiState.value.isWakeModeEnabled) {[m
+[32m+[m[32m            if (uiState.value.isWakeModeEnabled) {[m
+                 _commands.emit(UiCommand.DisableWakeMode)[m
+             } else {[m
+                 _commands.emit(UiCommand.EnableWakeMode)[m
+[36m@@ -219,92 +68,6 @@[m [mclass AgentViewModel([m
+         }[m
+     }[m
+ [m
+[31m-    fun onStartWakeWordTestClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.StartWakeWordTest)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onStopWakeWordTestClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.StopWakeWordTest)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onCorrectDetectionClicked() {[m
+[31m-        _uiState.update { it.copy(trueDetectionCount = it.trueDetectionCount + 1) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onFalseTriggerClicked() {[m
+[31m-        _uiState.update { it.copy(falseTriggerCount = it.falseTriggerCount + 1) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onRegisterMetaDatClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.LaunchMetaDatRegistration)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onGrantPermissionsClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.RequestMetaPermissions)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onCreateSessionClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.CreateMetaSession)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onCloseSessionClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.CloseMetaSession)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onReconnectSessionClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.ReconnectMetaSession)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onRefreshSessionClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.RefreshMetaSession)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onDiscoverCapabilitiesClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.DiscoverMetaCapabilities)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onInspectAudioApiClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.DiscoverMetaAudioApi)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onStartAudioRouteClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.StartBluetoothAudioRoute)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onStopAudioRouteClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.StopBluetoothAudioRoute)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onCapturePcmSampleClicked() {[m
+[31m-        viewModelScope.launch {[m
+[31m-            _commands.emit(UiCommand.CapturePcmSample)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+     fun onStartWearableSpeechTestClicked() {[m
+         viewModelScope.launch {[m
+             _commands.emit(UiCommand.StartWearableSpeechTest)[m
+[36m@@ -341,201 +104,56 @@[m [mclass AgentViewModel([m
+         }[m
+     }[m
+ [m
+[31m-    fun onInputTextChanged(newText: String) {[m
+[31m-        _uiState.update { it.copy(inputText = newText) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun onApiUrlChanged(newUrl: String) {[m
+[31m-        _uiState.update { it.copy(apiUrl = newUrl) }[m
+[31m-        sharedPrefs.edit().putString(AppConfig.KEY_API_URL, newUrl).apply()[m
+[32m+[m[32m    fun onCorrectDetectionClicked() {[m
+[32m+[m[32m        controller.onTrueDetection()[m
+     }[m
+ [m
+[31m-    fun onDeviceIdChanged(newId: String) {[m
+[31m-        _uiState.update { it.copy(deviceId = newId) }[m
+[31m-        sharedPrefs.edit().putString(AppConfig.KEY_DEVICE_ID, newId).apply()[m
+[31m-    }[m
+[32m+[m[32m    fun onFalseTriggerClicked() {[m
+[32m+[m[32m        controller.onFalseDetection()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun onRegisterMetaDatClicked() { viewModelScope.launch { _commands.emit(UiCommand.LaunchMetaDatRegistration) } }[m
+[32m+[m[32m    fun onGrantPermissionsClicked() { viewModelScope.launch { _commands.emit(UiCommand.RequestMetaPermissions) } }[m
+[32m+[m[32m    fun onCreateSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.CreateMetaSession) } }[m
+[32m+[m[32m    fun onCloseSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.CloseMetaSession) } }[m
+[32m+[m[32m    fun onReconnectSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.ReconnectMetaSession) } }[m
+[32m+[m[32m    fun onRefreshSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.RefreshMetaSession) } }[m
+[32m+[m[32m    fun onDiscoverCapabilitiesClicked() { viewModelScope.launch { _commands.emit(UiCommand.DiscoverMetaCapabilities) } }[m
+[32m+[m[32m    fun onInspectAudioApiClicked() { viewModelScope.launch { _commands.emit(UiCommand.DiscoverMetaAudioApi) } }[m
+[32m+[m[32m    fun onStartAudioRouteClicked() { viewModelScope.launch { _commands.emit(UiCommand.StartBluetoothAudioRoute) } }[m
+[32m+[m[32m    fun onStopAudioRouteClicked() { viewModelScope.launch { _commands.emit(UiCommand.StopBluetoothAudioRoute) } }[m
+[32m+[m[32m    fun onCapturePcmSampleClicked() { viewModelScope.launch { _commands.emit(UiCommand.CapturePcmSample) } }[m
+[32m+[m[32m    fun onStartWakeWordTestClicked() { viewModelScope.launch { _commands.emit(UiCommand.StartWakeWordTest) } }[m
+[32m+[m[32m    fun onStopWakeWordTestClicked() { viewModelScope.launch { _commands.emit(UiCommand.StopWakeWordTest) } }[m
+ [m
+[31m-    fun onSessionIdChanged(newSessionId: String) {[m
+[31m-        _uiState.update { it.copy(sessionId = newSessionId) }[m
+[31m-        sharedPrefs.edit().putString(AppConfig.KEY_SESSION_ID, newSessionId).apply()[m
+[32m+[m[32m    fun onInputTextChanged(newText: String) {[m
+[32m+[m[32m        controller.updateInputText(newText)[m
+     }[m
+[31m-[m
+[32m+[m[41m    [m
+     fun submitScreenInput() {[m
+[31m-        val textToSubmit = _uiState.value.inputText.trim()[m
+[31m-        if (textToSubmit.isEmpty()) return[m
+[31m-        _uiState.update { it.copy(inputText = "") }[m
+[31m-[m
+[31m-        if (inputSource is PhoneTextInputSource) {[m
+[31m-            inputSource.submitText(textToSubmit)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun clearEvents() {[m
+[31m-        _uiState.update { it.copy(events = emptyList()) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun submitExternalBridgeEvent(event: com.example.hermesbridge.bridge.BridgeEvent) {[m
+[31m-        val source = if (event.source.contains("wearable")) ConversationTurnSource.MetaWearableVoice else ConversationTurnSource.PhoneText[m
+[31m-        submitNewTurn(event.text, source)[m
+[31m-    }[m
+[31m-[m
+[31m-    private fun submitNewTurn(text: String, source: ConversationTurnSource) {[m
+[31m-        if (_uiState.value.isLoading) return[m
+[31m-[m
+[31m-        val turnId = UUID.randomUUID().toString()[m
+[31m-        val createdAt = getIsoTimestamp()[m
+[31m-        val turn = ConversationTurn([m
+[31m-            turnId = turnId,[m
+[31m-            sessionId = _uiState.value.sessionId,[m
+[31m-            source = source,[m
+[31m-            inputText = text,[m
+[31m-            createdAt = createdAt,[m
+[31m-            status = ConversationTurnStatus.Pending[m
+[31m-        )[m
+[31m-[m
+[31m-        _uiState.update { state ->[m
+[31m-            val newHistory = (listOf(turn) + state.conversationHistory).take(MAX_HISTORY)[m
+[31m-            state.copy([m
+[31m-                conversationHistory = newHistory,[m
+[31m-                currentTurnId = turnId[m
+[31m-            )[m
+[31m-        }[m
+[31m-[m
+[31m-        sendTextToBackend(text, turnId, source)[m
+[32m+[m[32m        val text = uiState.value.inputText.trim()[m
+[32m+[m[32m        if (text.isEmpty()) return[m
+[32m+[m[32m        controller.updateInputText("")[m
+[32m+[m[32m        controller.submitBridgeEvent(text, ConversationTurnSource.PhoneText)[m
+     }[m
+ [m
+     fun retryTurn(turn: ConversationTurn) {[m
+[31m-        if (_uiState.value.isLoading) return[m
+[31m-        submitNewTurn(turn.inputText, turn.source)[m
+[31m-    }[m
+[31m-[m
+[31m-    private fun sendTextToBackend(rawText: String, turnId: String, source: ConversationTurnSource) {[m
+[31m-        viewModelScope.launch {[m
+[31m-            val currentState = _uiState.value[m
+[31m-            val timestampIso = getIsoTimestamp()[m
+[31m-[m
+[31m-            addEvent(LogEvent.TextInput(text = rawText))[m
+[31m-[m
+[31m-            _uiState.update { state ->[m
+[31m-                state.copy([m
+[31m-                    isLoading = true,[m
+[31m-                    errorMessage = null,[m
+[31m-                    conversationHistory = state.conversationHistory.map {[m
+[31m-                        if (it.turnId == turnId) it.copy(status = ConversationTurnStatus.Sending) else it[m
+[31m-                    }[m
+[31m-                )[m
+[31m-            }[m
+[31m-            addEvent(LogEvent.NetworkRequestSent(url = currentState.apiUrl))[m
+[31m-[m
+[31m-            val requestPayload = AgentRequest([m
+[31m-                deviceId = currentState.deviceId,[m
+[31m-                sessionId = currentState.sessionId,[m
+[31m-                inputType = "text",[m
+[31m-                text = rawText,[m
+[31m-                timestamp = timestampIso,[m
+[31m-                metadata = AgentMetadata([m
+[31m-                    source = if (source == ConversationTurnSource.MetaWearableVoice) "meta_wearable_voice" else "phone_text",[m
+[31m-                    wearable = if (source == ConversationTurnSource.MetaWearableVoice) "meta_glasses" else "none",[m
+[31m-                    turnId = turnId,[m
+[31m-                    createdAt = timestampIso[m
+[31m-                )[m
+[31m-            )[m
+[31m-[m
+[31m-            val response = repository.sendMessage(currentState.apiUrl, requestPayload)[m
+[31m-[m
+[31m-            if (_uiState.value.currentTurnId != turnId) return@launch[m
+[31m-[m
+[31m-            _uiState.update { it.copy(isLoading = false) }[m
+[31m-[m
+[31m-            if (response.error == null) {[m
+[31m-                val textToSpeak = response.finalResponseText[m
+[31m-                _uiState.update { state ->[m
+[31m-                    state.copy([m
+[31m-                        latestResponse = textToSpeak,[m
+[31m-                        errorMessage = null,[m
+[31m-                        isBackendConnected = true,[m
+[31m-                        conversationHistory = state.conversationHistory.map {[m
+[31m-                            if (it.turnId == turnId) it.copy([m
+[31m-                                status = ConversationTurnStatus.Completed,[m
+[31m-                                responseText = textToSpeak,[m
+[31m-                                completedAt = getIsoTimestamp()[m
+[31m-                            ) else it[m
+[31m-                        }[m
+[31m-                    )[m
+[31m-                }[m
+[31m-                addEvent(LogEvent.NetworkResponseReceived(responseText = textToSpeak))[m
+[31m-                speakResponse(textToSpeak)[m
+[31m-            } else {[m
+[31m-                val errorDetails = response.error ?: "Communication Failure"[m
+[31m-                _uiState.update { state ->[m
+[31m-                    state.copy([m
+[31m-                        errorMessage = errorDetails,[m
+[31m-                        latestResponse = "",[m
+[31m-                        isBackendConnected = false,[m
+[31m-                        conversationHistory = state.conversationHistory.map {[m
+[31m-                            if (it.turnId == turnId) it.copy([m
+[31m-                                status = ConversationTurnStatus.Failed,[m
+[31m-                                errorMessage = errorDetails[m
+[31m-                            ) else it[m
+[31m-                        }[m
+[31m-                    )[m
+[31m-                }[m
+[31m-                addEvent(LogEvent.ErrorOccurred(error = errorDetails))[m
+[31m-            }[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    private fun addEvent(event: LogEvent) {[m
+[31m-        _uiState.update {[m
+[31m-            it.copy(events = listOf(event) + it.events)[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    private fun getIsoTimestamp(): String {[m
+[31m-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())[m
+[31m-        sdf.timeZone = TimeZone.getTimeZone("UTC")[m
+[31m-        return sdf.format(Date())[m
+[32m+[m[32m        controller.submitBridgeEvent(turn.inputText, turn.source)[m
+     }[m
+ [m
+     fun stopSpeaking() {[m
+[31m-        speechOutput?.stop()[m
+[31m-        _uiState.update { it.copy(isTtsSpeaking = false) }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun speakResponse(text: String, onComplete: () -> Unit = {}) {[m
+[31m-        _uiState.update { it.copy(isTtsSpeaking = true) }[m
+[31m-        speechOutput?.speak(text) {[m
+[31m-            _uiState.update { it.copy(isTtsSpeaking = false) }[m
+[31m-            addEvent(LogEvent.TtsSpoken(text = text))[m
+[31m-            onComplete()[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    fun updateBatteryState(level: Int, isCharging: Boolean) {[m
+[31m-        _uiState.update {[m
+[31m-            it.copy([m
+[31m-                batteryLevel = level,[m
+[31m-                isBatteryCharging = isCharging[m
+[31m-            )[m
+[31m-        }[m
+[31m-    }[m
+[31m-[m
+[31m-    override fun onCleared() {[m
+[31m-        super.onCleared()[m
+[31m-        inputSource.stop()[m
+[31m-        speechOutput?.shutdown()[m
+[32m+[m[32m        controller.stopSpeaking()[m
+     }[m
+ }[m
+ [m
+ class AgentViewModelFactory([m
+     private val application: Application,[m
+[31m-    private val repository: AgentRepository,[m
+[31m-    private val inputSource: InputSource[m
+[32m+[m[32m    private val controller: BridgeController[m
+ ) : androidx.lifecycle.ViewModelProvider.Factory {[m
+     @Suppress("UNCHECKED_CAST")[m
+     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {[m
+         if (modelClass.isAssignableFrom(AgentViewModel::class.java)) {[m
+[31m-            return AgentViewModel(application, repository, inputSource) as T[m
+[32m+[m[32m            return AgentViewModel(application, controller) as T[m
+         }[m
+         throw IllegalArgumentException("Unknown ViewModel class")[m
+     }[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/BridgeController.kt b/app/src/main/java/com/example/hermesbridge/BridgeController.kt[m
+[1mnew file mode 100644[m
+[1mindex 0000000..623840f[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/BridgeController.kt[m
+[36m@@ -0,0 +1,250 @@[m
+[32m+[m[32mpackage com.example.hermesbridge[m
+[32m+[m
+[32m+[m[32mimport android.content.Context[m
+[32m+[m[32mimport android.util.Log[m
+[32m+[m[32mimport com.example.hermesbridge.conversation.*[m
+[32m+[m[32mimport com.example.hermesbridge.metrics.BatterySnapshot[m
+[32m+[m[32mimport com.example.hermesbridge.metrics.LatencyBreakdown[m
+[32m+[m[32mimport com.example.hermesbridge.metrics.WakeReliabilityStats[m
+[32m+[m[32mimport com.example.hermesbridge.speech.SpeechOutput[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.WakeWordDetection[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.WakeWordStatus[m
+[32m+[m[32mimport kotlinx.coroutines.*[m
+[32m+[m[32mimport kotlinx.coroutines.flow.*[m
+[32m+[m[32mimport java.text.SimpleDateFormat[m
+[32m+[m[32mimport java.util.*[m
+[32m+[m
+[32m+[m[32m/**[m
+[32m+[m[32m * Singleton controller for the Hermes Bridge interaction loop.[m
+[32m+[m[32m * Survives Activity destruction and can be used by the Foreground Service.[m
+[32m+[m[32m */[m
+[32m+[m[32mclass BridgeController([m
+[32m+[m[32m    private val context: Context,[m
+[32m+[m[32m    private val scope: CoroutineScope,[m
+[32m+[m[32m    private val repository: AgentRepository,[m
+[32m+[m[32m    private val speechOutput: SpeechOutput,[m
+[32m+[m[32m    private val metaDatManager: com.example.hermesbridge.meta.MetaDatManager,[m
+[32m+[m[32m    private val audioRouteManager: com.example.hermesbridge.audio.BluetoothAudioRouteManager,[m
+[32m+[m[32m    private val speechToText: com.example.hermesbridge.speech.AndroidSpeechRecognizerInput,[m
+[32m+[m[32m    private val wakeWordManager: com.example.hermesbridge.wakeword.WakeWordTestManager,[m
+[32m+[m[32m    private val metricsCollector: com.example.hermesbridge.metrics.InteractionMetricsCollector[m
+[32m+[m[32m) {[m
+[32m+[m[32m    private val _uiState = MutableStateFlow(AgentUiState())[m
+[32m+[m[32m    val uiState: StateFlow<AgentUiState> = _uiState.asStateFlow()[m
+[32m+[m
+[32m+[m[32m    private val sharedPrefs = context.getSharedPreferences(AppConfig.PREFS_NAME, Context.MODE_PRIVATE)[m
+[32m+[m[32m    private val MAX_HISTORY = 20[m
+[32m+[m
+[32m+[m[32m    init {[m
+[32m+[m[32m        val savedApiUrl = sharedPrefs.getString(AppConfig.KEY_API_URL, AppConfig.DEFAULT_BASE_URL) ?: AppConfig.DEFAULT_BASE_URL[m
+[32m+[m[32m        val savedDeviceId = sharedPrefs.getString(AppConfig.KEY_DEVICE_ID, AppConfig.DEFAULT_DEVICE_ID) ?: AppConfig.DEFAULT_DEVICE_ID[m
+[32m+[m[32m        startNewSession(savedApiUrl, savedDeviceId)[m
+[32m+[m[32m        startObserving()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun startObserving() {[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            metaDatManager.status.collect { s -> updateMetaDatStatus(s) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            metaDatManager.capabilities.collect { c -> updateMetaCapabilities(c) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            metaDatManager.audioInfo.collect { a -> updateMetaAudioInfo(a) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            audioRouteManager.status.collect { s ->[m[41m [m
+[32m+[m[32m                updateAudioRouteStatus(s)[m
+[32m+[m[32m                if (s is com.example.hermesbridge.audio.BluetoothAudioRouteStatus.Routed) {[m
+[32m+[m[32m                    metricsCollector.onBluetoothRouteStarted()[m
+[32m+[m[32m                } else {[m
+[32m+[m[32m                    metricsCollector.onBluetoothRouteStopped()[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            speechToText.status.collect { s -> updateSpeechStatus(s) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            speechToText.result.collect { r -> updateSpeechResult(r) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            wakeWordManager.status.collect { s -> updateWakeWordStatus(s) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            wakeWordManager.lastDetection.collect { d -> updateLastWakeDetection(d) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            metricsCollector.reliabilityStats.collect { s -> updateReliabilityStats(s) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            metricsCollector.lastLatency.collect { l -> updateLastLatency(l) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            while (isActive) {[m
+[32m+[m[32m                updateBtUptime(metricsCollector.getBluetoothUptimeMs())[m
+[32m+[m[32m                delay(1000)[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun startNewSession(apiUrl: String? = null, deviceId: String? = null) {[m
+[32m+[m[32m        val newSessionId = "phone-session-${UUID.randomUUID().toString().substring(0, 8)}"[m
+[32m+[m[32m        val url = apiUrl ?: _uiState.value.apiUrl[m
+[32m+[m[32m        val dId = deviceId ?: _uiState.value.deviceId[m
+[32m+[m
+[32m+[m[32m        _uiState.update {[m
+[32m+[m[32m            it.copy([m
+[32m+[m[32m                apiUrl = url,[m
+[32m+[m[32m                deviceId = dId,[m
+[32m+[m[32m                sessionId = newSessionId,[m
+[32m+[m[32m                conversationHistory = emptyList(),[m
+[32m+[m[32m                currentTurnId = null,[m
+[32m+[m[32m                latestResponse = "",[m
+[32m+[m[32m                errorMessage = null[m
+[32m+[m[32m            )[m
+[32m+[m[32m        }[m
+[32m+[m[32m        Log.i("HermesBridgeController", "Started new session: $newSessionId")[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun submitBridgeEvent(text: String, source: ConversationTurnSource) {[m
+[32m+[m[32m        if (_uiState.value.isLoading) return[m
+[32m+[m
+[32m+[m[32m        val turnId = UUID.randomUUID().toString()[m
+[32m+[m[32m        val createdAt = getIsoTimestamp()[m
+[32m+[m[32m        val turn = ConversationTurn([m
+[32m+[m[32m            turnId = turnId,[m
+[32m+[m[32m            sessionId = _uiState.value.sessionId,[m
+[32m+[m[32m            source = source,[m
+[32m+[m[32m            inputText = text,[m
+[32m+[m[32m            createdAt = createdAt,[m
+[32m+[m[32m            status = ConversationTurnStatus.Pending[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        _uiState.update { state ->[m
+[32m+[m[32m            val newHistory = (listOf(turn) + state.conversationHistory).take(MAX_HISTORY)[m
+[32m+[m[32m            state.copy([m
+[32m+[m[32m                conversationHistory = newHistory,[m
+[32m+[m[32m                currentTurnId = turnId,[m
+[32m+[m[32m                isLoading = true,[m
+[32m+[m[32m                errorMessage = null[m
+[32m+[m[32m            )[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        sendTextToBackend(text, turnId, source)[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun sendTextToBackend(rawText: String, turnId: String, source: ConversationTurnSource) {[m
+[32m+[m[32m        scope.launch {[m
+[32m+[m[32m            val currentState = _uiState.value[m
+[32m+[m[32m            val timestampIso = getIsoTimestamp()[m
+[32m+[m
+[32m+[m[32m            val requestPayload = AgentRequest([m
+[32m+[m[32m                deviceId = currentState.deviceId,[m
+[32m+[m[32m                sessionId = currentState.sessionId,[m
+[32m+[m[32m                inputType = "text",[m
+[32m+[m[32m                text = rawText,[m
+[32m+[m[32m                timestamp = timestampIso,[m
+[32m+[m[32m                metadata = AgentMetadata([m
+[32m+[m[32m                    source = if (source == ConversationTurnSource.MetaWearableVoice) "meta_wearable_voice" else "phone_text",[m
+[32m+[m[32m                    wearable = if (source == ConversationTurnSource.MetaWearableVoice) "meta_glasses" else "none",[m
+[32m+[m[32m                    turnId = turnId,[m
+[32m+[m[32m                    createdAt = timestampIso[m
+[32m+[m[32m                )[m
+[32m+[m[32m            )[m
+[32m+[m
+[32m+[m[32m            val response = repository.sendMessage(currentState.apiUrl, requestPayload)[m
+[32m+[m
+[32m+[m[32m            if (_uiState.value.currentTurnId != turnId) return@launch[m
+[32m+[m
+[32m+[m[32m            _uiState.update { it.copy(isLoading = false) }[m
+[32m+[m
+[32m+[m[32m            if (response.error == null) {[m
+[32m+[m[32m                val textToSpeak = response.finalResponseText[m
+[32m+[m[32m                _uiState.update { state ->[m
+[32m+[m[32m                    state.copy([m
+[32m+[m[32m                        latestResponse = textToSpeak,[m
+[32m+[m[32m                        errorMessage = null,[m
+[32m+[m[32m                        isBackendConnected = true,[m
+[32m+[m[32m                        conversationHistory = state.conversationHistory.map {[m
+[32m+[m[32m                            if (it.turnId == turnId) it.copy([m
+[32m+[m[32m                                status = ConversationTurnStatus.Completed,[m
+[32m+[m[32m                                responseText = textToSpeak,[m
+[32m+[m[32m                                completedAt = getIsoTimestamp()[m
+[32m+[m[32m                            ) else it[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    )[m
+[32m+[m[32m                }[m
+[32m+[m[32m                speakResponse(textToSpeak)[m
+[32m+[m[32m            } else {[m
+[32m+[m[32m                val errorDetails = response.error ?: "Communication Failure"[m
+[32m+[m[32m                _uiState.update { state ->[m
+[32m+[m[32m                    state.copy([m
+[32m+[m[32m                        errorMessage = errorDetails,[m
+[32m+[m[32m                        latestResponse = "",[m
+[32m+[m[32m                        isBackendConnected = false,[m
+[32m+[m[32m                        conversationHistory = state.conversationHistory.map {[m
+[32m+[m[32m                            if (it.turnId == turnId) it.copy([m
+[32m+[m[32m                                status = ConversationTurnStatus.Failed,[m
+[32m+[m[32m                                errorMessage = errorDetails[m
+[32m+[m[32m                            ) else it[m
+[32m+[m[32m                        }[m
+[32m+[m[32m                    )[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun speakResponse(text: String, onComplete: () -> Unit = {}) {[m
+[32m+[m[32m        _uiState.update { it.copy(isTtsSpeaking = true) }[m
+[32m+[m[32m        speechOutput.speak(text) {[m
+[32m+[m[32m            _uiState.update { it.copy(isTtsSpeaking = false) }[m
+[32m+[m[32m            onComplete()[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun stopSpeaking() {[m
+[32m+[m[32m        speechOutput.stop()[m
+[32m+[m[32m        _uiState.update { it.copy(isTtsSpeaking = false) }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun getIsoTimestamp(): String {[m
+[32m+[m[32m        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.getDefault())[m
+[32m+[m[32m        sdf.timeZone = TimeZone.getTimeZone("UTC")[m
+[32m+[m[32m        return sdf.format(Date())[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    // Proxy methods for state updates from coordinators[m
+[32m+[m[32m    fun updateMetaDatStatus(s: com.example.hermesbridge.meta.MetaDatStatus) { _uiState.update { it.copy(metaDatStatus = s) } }[m
+[32m+[m[32m    fun updateMetaDatMessage(m: String?) { _uiState.update { it.copy(metaDatMessage = m) } }[m
+[32m+[m[32m    fun updatePermissionMessage(m: String?) { _uiState.update { it.copy(permissionMessage = m) } }[m
+[32m+[m[32m    fun updateMetaCapabilities(c: com.example.hermesbridge.meta.MetaCapabilityStatus) { _uiState.update { it.copy(metaCapabilities = c) } }[m
+[32m+[m[32m    fun updateMetaAudioInfo(a: com.example.hermesbridge.meta.MetaAudioCapabilityInfo) { _uiState.update { it.copy(metaAudioInfo = a) } }[m
+[32m+[m[32m    fun updatePcmCaptureStatus(s: com.example.hermesbridge.audio.PcmCaptureStatus) { _uiState.update { it.copy(pcmCaptureStatus = s) } }[m
+[32m+[m[32m    fun updatePcmCaptureResult(r: com.example.hermesbridge.audio.PcmCaptureResult) { _uiState.update { it.copy(pcmCaptureResult = r) } }[m
+[32m+[m[32m    fun updateSpeechStatus(s: com.example.hermesbridge.speech.SpeechRecognitionStatus) { _uiState.update { it.copy(speechStatus = s) } }[m
+[32m+[m[32m    fun updateSpeechResult(r: com.example.hermesbridge.speech.SpeechRecognitionResult) { _uiState.update { it.copy(speechResult = r) } }[m
+[32m+[m[32m    fun updateAudioRouteStatus(s: com.example.hermesbridge.audio.BluetoothAudioRouteStatus) { _uiState.update { it.copy(audioRouteStatus = s) } }[m
+[32m+[m[32m    fun updateConversationTurnState(s: ConversationTurnState) { _uiState.update { it.copy(turnState = s) } }[m
+[32m+[m[32m    fun updateTriggerStatus(s: com.example.hermesbridge.trigger.WearableTriggerStatus) { _uiState.update { it.copy(triggerStatus = s) } }[m
+[32m+[m[32m    fun updateWakeWordStatus(s: WakeWordStatus) { _uiState.update { it.copy(wakeWordStatus = s) } }[m
+[32m+[m[32m    fun updateLastWakeDetection(d: WakeWordDetection?) { _uiState.update { it.copy(lastWakeDetection = d) } }[m
+[32m+[m[32m    fun updateWakeModeEnabled(e: Boolean) { _uiState.update { it.copy(isWakeModeEnabled = e) } }[m
+[32m+[m[32m    fun updateReliabilityStats(s: WakeReliabilityStats) { _uiState.update { it.copy(reliabilityStats = s) } }[m
+[32m+[m[32m    fun updateLastLatency(l: LatencyBreakdown) { _uiState.update { it.copy(lastLatency = l) } }[m
+[32m+[m[32m    fun updateBatterySnapshot(s: BatterySnapshot) { _uiState.update { it.copy(batterySnapshot = s) } }[m
+[32m+[m[32m    fun updateBtUptime(u: Long) { _uiState.update { it.copy(btUptimeMs = u) } }[m
+[32m+[m[32m    fun updateBatteryState(level: Int, isCharging: Boolean) { _uiState.update { it.copy(batteryLevel = level, isBatteryCharging = isCharging) } }[m
+[32m+[m[41m    [m
+[32m+[m[32m    fun onTrueDetection() {[m
+[32m+[m[32m        metricsCollector.onTrueDetection()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun onFalseDetection() {[m
+[32m+[m[32m        metricsCollector.onFalseDetection()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun updateInputText(text: String) {[m
+[32m+[m[32m        _uiState.update { it.copy(inputText = text) }[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/HermesBridgeApp.kt b/app/src/main/java/com/example/hermesbridge/HermesBridgeApp.kt[m
+[1mnew file mode 100644[m
+[1mindex 0000000..633ecb8[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/HermesBridgeApp.kt[m
+[36m@@ -0,0 +1,109 @@[m
+[32m+[m[32mpackage com.example.hermesbridge[m
+[32m+[m
+[32m+[m[32mimport android.app.Application[m
+[32m+[m[32mimport android.util.Log[m
+[32m+[m[32mimport com.example.hermesbridge.audio.BluetoothAudioRouteManager[m
+[32m+[m[32mimport com.example.hermesbridge.bridge.MetaWearableInputSource[m
+[32m+[m[32mimport com.example.hermesbridge.bridge.PhoneTextInputSource[m
+[32m+[m[32mimport com.example.hermesbridge.conversation.ConversationTurnCoordinator[m
+[32m+[m[32mimport com.example.hermesbridge.conversation.ConversationTurnSource[m
+[32m+[m[32mimport com.example.hermesbridge.meta.MetaDatManager[m
+[32m+[m[32mimport com.example.hermesbridge.metrics.InteractionMetricsCollector[m
+[32m+[m[32mimport com.example.hermesbridge.speech.AndroidSpeechRecognizerInput[m
+[32m+[m[32mimport com.example.hermesbridge.speech.AndroidTtsSpeechOutput[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.PorcupineWakeWordEngine[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.WakeWordConversationCoordinator[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.WakeWordTestManager[m
+[32m+[m[32mimport kotlinx.coroutines.*[m
+[32m+[m[32mimport kotlinx.coroutines.flow.collect[m
+[32m+[m
+[32m+[m[32mclass HermesBridgeApp : Application() {[m
+[32m+[m
+[32m+[m[32m    val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)[m
+[32m+[m
+[32m+[m[32m    lateinit var metaDatManager: MetaDatManager[m
+[32m+[m[32m    lateinit var audioRouteManager: BluetoothAudioRouteManager[m
+[32m+[m[32m    lateinit var metricsCollector: InteractionMetricsCollector[m
+[32m+[m[32m    lateinit var wearableInputSource: MetaWearableInputSource[m
+[32m+[m[32m    lateinit var speechToText: AndroidSpeechRecognizerInput[m
+[32m+[m[32m    lateinit var wakeWordManager: WakeWordTestManager[m
+[32m+[m[32m    lateinit var turnCoordinator: ConversationTurnCoordinator[m
+[32m+[m[32m    lateinit var wakeTurnCoordinator: WakeWordConversationCoordinator[m
+[32m+[m[41m    [m
+[32m+[m[32m    lateinit var repository: AgentRepository[m
+[32m+[m[32m    lateinit var phoneInputSource: PhoneTextInputSource[m
+[32m+[m[32m    lateinit var bridgeController: BridgeController[m
+[32m+[m[32m    lateinit var speechOutput: AndroidTtsSpeechOutput[m
+[32m+[m
+[32m+[m[32m    override fun onCreate() {[m
+[32m+[m[32m        super.onCreate()[m
+[32m+[m[32m        Log.i("HermesApp", "Application onCreate")[m
+[32m+[m
+[32m+[m[32m        metricsCollector = InteractionMetricsCollector(this)[m
+[32m+[m[32m        audioRouteManager = BluetoothAudioRouteManager(this)[m
+[32m+[m[32m        metaDatManager = MetaDatManager(this)[m
+[32m+[m[32m        wearableInputSource = MetaWearableInputSource()[m
+[32m+[m[32m        phoneInputSource = PhoneTextInputSource()[m
+[32m+[m[41m        [m
+[32m+[m[32m        speechToText = AndroidSpeechRecognizerInput(this) {[m
+[32m+[m[32m            audioRouteManager.isRoutingToBluetooth()[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        val api = OkHttpAgentApi()[m
+[32m+[m[32m        repository = AgentRepository(api)[m
+[32m+[m[41m        [m
+[32m+[m[32m        metaDatManager.initialize()[m
+[32m+[m[41m        [m
+[32m+[m[32m        speechOutput = AndroidTtsSpeechOutput(this)[m
+[32m+[m
+[32m+[m[32m        val porcupineEngine = PorcupineWakeWordEngine(this, BuildConfig.PICOVOICE_ACCESS_KEY)[m
+[32m+[m[32m        wakeWordManager = WakeWordTestManager(this, porcupineEngine) {[m
+[32m+[m[32m            audioRouteManager.isRoutingToBluetooth()[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        bridgeController = BridgeController([m
+[32m+[m[32m            this,[m
+[32m+[m[32m            applicationScope,[m
+[32m+[m[32m            repository,[m
+[32m+[m[32m            speechOutput,[m
+[32m+[m[32m            metaDatManager,[m
+[32m+[m[32m            audioRouteManager,[m
+[32m+[m[32m            speechToText,[m
+[32m+[m[32m            wakeWordManager,[m
+[32m+[m[32m            metricsCollector[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        turnCoordinator = ConversationTurnCoordinator([m
+[32m+[m[32m            applicationScope,[m
+[32m+[m[32m            bridgeController,[m
+[32m+[m[32m            metaDatManager,[m
+[32m+[m[32m            audioRouteManager,[m
+[32m+[m[32m            speechToText,[m
+[32m+[m[32m            wearableInputSource,[m
+[32m+[m[32m            metricsCollector[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        wakeTurnCoordinator = WakeWordConversationCoordinator([m
+[32m+[m[32m            applicationScope,[m
+[32m+[m[32m            bridgeController,[m
+[32m+[m[32m            wakeWordManager,[m
+[32m+[m[32m            turnCoordinator,[m
+[32m+[m[32m            metricsCollector[m
+[32m+[m[32m        )[m
+[32m+[m[41m        [m
+[32m+[m[32m        wearableInputSource.setListener { event ->[m
+[32m+[m[32m            bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.MetaWearableVoice)[m
+[32m+[m[32m        }[m
+[32m+[m[41m        [m
+[32m+[m[32m        phoneInputSource.setListener { event ->[m
+[32m+[m[32m            bridgeController.submitBridgeEvent(event.text, ConversationTurnSource.PhoneText)[m
+[32m+[m[32m        }[m
+[32m+[m[41m        [m
+[32m+[m[32m        phoneInputSource.start()[m
+[32m+[m[32m        wearableInputSource.start()[m
+[32m+[m[41m        [m
+[32m+[m[32m        applicationScope.launch {[m
+[32m+[m[32m            turnCoordinator.turnState.collect { bridgeController.updateConversationTurnState(it) }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/MainActivity.kt b/app/src/main/java/com/example/hermesbridge/MainActivity.kt[m
+[1mindex 6a62859..d0e4f4a 100644[m
+[1m--- a/app/src/main/java/com/example/hermesbridge/MainActivity.kt[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/MainActivity.kt[m
+[36m@@ -1,6 +1,7 @@[m
+ package com.example.hermesbridge[m
+ [m
+ import android.content.Intent[m
+[32m+[m[32mimport android.os.Build[m
+ import android.os.Bundle[m
+ import android.util.Log[m
+ import androidx.activity.ComponentActivity[m
+[36m@@ -11,43 +12,28 @@[m [mimport androidx.compose.material3.MaterialTheme[m
+ import androidx.compose.ui.Modifier[m
+ import androidx.lifecycle.ViewModelProvider[m
+ import androidx.lifecycle.lifecycleScope[m
+[31m-import com.example.hermesbridge.bridge.MetaWearableInputSource[m
+[31m-import com.example.hermesbridge.bridge.PhoneTextInputSource[m
+[31m-import com.example.hermesbridge.meta.MetaDatManager[m
+ import com.example.hermesbridge.meta.MetaDatStatus[m
+ import com.example.hermesbridge.permissions.MetaPermissionManager[m
+ import com.example.hermesbridge.permissions.PermissionState[m
+[31m-import com.example.hermesbridge.audio.BluetoothAudioRouteManager[m
+ import com.example.hermesbridge.audio.BluetoothAudioRouteStatus[m
+ import com.example.hermesbridge.audio.PcmCaptureManager[m
+ import com.example.hermesbridge.conversation.ConversationTurnCoordinator[m
+[32m+[m[32mimport com.example.hermesbridge.conversation.ConversationTurnState[m
+ import com.example.hermesbridge.metrics.InteractionMetricsCollector[m
+ import com.example.hermesbridge.trigger.MetaWearableTurnTrigger[m
+[31m-import com.example.hermesbridge.wakeword.PorcupineWakeWordEngine[m
+ import com.example.hermesbridge.wakeword.WakeWordConversationCoordinator[m
+ import com.example.hermesbridge.wakeword.WakeWordTestManager[m
+[31m-import com.example.hermesbridge.speech.AndroidSpeechRecognizerInput[m
+[31m-import com.example.hermesbridge.speech.AndroidTtsSpeechOutput[m
+[31m-import com.example.hermesbridge.speech.SpeechRecognitionStatus[m
+[32m+[m[32mimport com.example.hermesbridge.service.WakeWordForegroundService[m
+ import kotlinx.coroutines.delay[m
+[31m-import kotlinx.coroutines.flow.combine[m
+ import kotlinx.coroutines.launch[m
+ [m
+ class MainActivity : ComponentActivity() {[m
+ [m
+     private lateinit var viewModel: AgentViewModel[m
+[31m-    private var speechOutput: AndroidTtsSpeechOutput? = null[m
+[31m-    private lateinit var metaDatManager: MetaDatManager[m
+[32m+[m[32m    private lateinit var app: HermesBridgeApp[m
+     private lateinit var permissionManager: MetaPermissionManager[m
+[31m-    private lateinit var audioRouteManager: BluetoothAudioRouteManager[m
+     private lateinit var pcmCaptureManager: PcmCaptureManager[m
+[31m-    private lateinit var speechToText: AndroidSpeechRecognizerInput[m
+[31m-    private lateinit var wearableInputSource: MetaWearableInputSource[m
+[31m-    private lateinit var turnCoordinator: ConversationTurnCoordinator[m
+     private lateinit var turnTrigger: MetaWearableTurnTrigger[m
+[31m-    private lateinit var wakeWordManager: WakeWordTestManager[m
+[31m-    private lateinit var wakeTurnCoordinator: WakeWordConversationCoordinator[m
+[31m-    private lateinit var metricsCollector: InteractionMetricsCollector[m
+ [m
+     private val permissionLauncher = registerForActivityResult([m
+         ActivityResultContracts.RequestMultiplePermissions()[m
+[36m@@ -58,7 +44,7 @@[m [mclass MainActivity : ComponentActivity() {[m
+             refreshAllStatuses()[m
+         } else {[m
+             Log.w("HermesBridge", "Permissions denied: $denied")[m
+[31m-            viewModel.updatePermissionMessage("Permissions denied: ${denied.joinToString(", ")}")[m
+[32m+[m[32m            app.bridgeController.updatePermissionMessage("Permissions denied: ${denied.joinToString(", ")}")[m
+         }[m
+     }[m
+ [m
+[36m@@ -76,185 +62,89 @@[m [mclass MainActivity : ComponentActivity() {[m
+             val isCharging = status == android.os.BatteryManager.BATTERY_STATUS_CHARGING ||[m
+                     status == android.os.BatteryManager.BATTERY_STATUS_FULL[m
+ [m
+[31m-            viewModel.updateBatteryState(batteryPct, isCharging)[m
+[32m+[m[32m            app.bridgeController.updateBatteryState(batteryPct, isCharging)[m
+         }[m
+     }[m
+ [m
+     override fun onCreate(savedInstanceState: Bundle?) {[m
+         super.onCreate(savedInstanceState)[m
+[32m+[m[32m        app = application as HermesBridgeApp[m
+ [m
+         permissionManager = MetaPermissionManager(this)[m
+         val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager[m
+[31m-        audioRouteManager = BluetoothAudioRouteManager(this)[m
+         pcmCaptureManager = PcmCaptureManager(this, audioManager)[m
+[31m-        speechToText = AndroidSpeechRecognizerInput(this) {[m
+[31m-            audioRouteManager.isRoutingToBluetooth() [m
+[31m-        }[m
+[31m-        wearableInputSource = MetaWearableInputSource()[m
+[31m-        metaDatManager = MetaDatManager(this)[m
+         turnTrigger = MetaWearableTurnTrigger()[m
+[31m-        metricsCollector = InteractionMetricsCollector(this)[m
+[31m-[m
+[31m-        val porcupineEngine = PorcupineWakeWordEngine(this, BuildConfig.PICOVOICE_ACCESS_KEY)[m
+[31m-        wakeWordManager = WakeWordTestManager(this, porcupineEngine) {[m
+[31m-            audioRouteManager.isRoutingToBluetooth()[m
+[31m-        }[m
+[31m-[m
+[31m-        // 1. Initialize Inputs and Repositories[m
+[31m-        val phoneInputSource = PhoneTextInputSource()[m
+[31m-        val api = OkHttpAgentApi()[m
+[31m-        val repository = AgentRepository(api)[m
+ [m
+[31m-        // 2. Instantiate MVVM-lite ViewModel[m
+[31m-        val factory = AgentViewModelFactory([m
+[31m-            application = this.application,[m
+[31m-            repository = repository,[m
+[31m-            inputSource = phoneInputSource[m
+[31m-        )[m
+[32m+[m[32m        val factory = AgentViewModelFactory(application, app.bridgeController)[m
+         viewModel = ViewModelProvider(this, factory)[AgentViewModel::class.java][m
+ [m
+[31m-        turnCoordinator = ConversationTurnCoordinator([m
+[31m-            lifecycleScope,[m
+[31m-            viewModel,[m
+[31m-            metaDatManager,[m
+[31m-            audioRouteManager,[m
+[31m-            speechToText,[m
+[31m-            wearableInputSource,[m
+[31m-            metricsCollector[m
+[31m-        )[m
+[31m-[m
+[31m-        wakeTurnCoordinator = WakeWordConversationCoordinator([m
+[31m-            lifecycleScope,[m
+[31m-            viewModel,[m
+[31m-            wakeWordManager,[m
+[31m-            turnCoordinator,[m
+[31m-            metricsCollector[m
+[31m-        )[m
+[31m-[m
+[31m-        // Connect wearable input source to the ViewModel logic[m
+[31m-        wearableInputSource.setListener { event ->[m
+[31m-            viewModel.submitExternalBridgeEvent(event)[m
+[31m-        }[m
+[31m-        wearableInputSource.start()[m
+[31m-[m
+[31m-        // 3. Initialize Android's standard TTS response output player on the UI thread[m
+[31m-        speechOutput = AndroidTtsSpeechOutput(this) { success ->[m
+[31m-            if (success) {[m
+[31m-                Log.d("MainActivity", "TextToSpeech successfully initialized")[m
+[31m-                speechOutput?.let { viewModel.setSpeechOutput(it) }[m
+[31m-            } else {[m
+[31m-                Log.e("MainActivity", "TextToSpeech initialization failed")[m
+[31m-            }[m
+[31m-        }[m
+[31m-[m
+[31m-        // 4. Status Observers[m
+[31m-        lifecycleScope.launch {[m
+[31m-            metaDatManager.status.collect { status ->[m
+[31m-                viewModel.updateMetaDatStatus(status)[m
+[31m-                if (status is MetaDatStatus.MissingMetaApp) {[m
+[31m-                    viewModel.updateMetaDatMessage("Install or open the Meta AI companion app, then return here.")[m
+[31m-                } else if (status is MetaDatStatus.Ready) {[m
+[31m-                    viewModel.updateMetaDatMessage("Registration ready.")[m
+[31m-                }[m
+[31m-            }[m
+[31m-        }[m
+[31m-        [m
+[31m-        lifecycleScope.launch {[m
+[31m-            audioRouteManager.status.collect { status ->[m
+[31m-                viewModel.updateAudioRouteStatus(status)[m
+[31m-                if (status is BluetoothAudioRouteStatus.Routed) {[m
+[31m-                    metricsCollector.onBluetoothRouteStarted()[m
+[31m-                } else {[m
+[31m-                    metricsCollector.onBluetoothRouteStopped()[m
+[31m-                }[m
+[31m-            }[m
+[31m-        }[m
+[31m-        [m
+[31m-        lifecycleScope.launch {[m
+[31m-            metricsCollector.reliabilityStats.collect { viewModel.updateReliabilityStats(it) }[m
+[31m-        }[m
+[31m-        [m
+[31m-        lifecycleScope.launch {[m
+[31m-            metricsCollector.lastLatency.collect { viewModel.updateLastLatency(it) }[m
+[31m-        }[m
+[31m-[m
+[31m-        lifecycleScope.launch {[m
+[31m-            while (true) {[m
+[31m-                viewModel.updateBtUptime(metricsCollector.getBluetoothUptimeMs())[m
+[31m-                delay(1000)[m
+[31m-            }[m
+[31m-        }[m
+[31m-[m
+[31m-        lifecycleScope.launch {[m
+[31m-            wakeTurnCoordinator.isWakeModeEnabled.collect { viewModel.updateWakeModeEnabled(it) }[m
+[31m-        }[m
+[31m-[m
+[31m-        lifecycleScope.launch {[m
+[31m-            wakeWordManager.status.collect { viewModel.updateWakeWordStatus(it) }[m
+[31m-        }[m
+[31m-[m
+[31m-        lifecycleScope.launch {[m
+[31m-            wakeWordManager.lastDetection.collect { viewModel.updateLastWakeDetection(it) }[m
+[31m-        }[m
+[31m-        [m
+[31m-        lifecycleScope.launch {[m
+[31m-            turnCoordinator.turnState.collect { viewModel.updateConversationTurnState(it) }[m
+[31m-        }[m
+[31m-        [m
+[31m-        // Command listener for UI actions[m
+[32m+[m[32m        // Proxy commands to managers[m
+         lifecycleScope.launch {[m
+             viewModel.commands.collect { command ->[m
+                 when (command) {[m
+[31m-                    is UiCommand.LaunchMetaDatRegistration -> metaDatManager.startRegistration(this@MainActivity)[m
+[32m+[m[32m                    is UiCommand.LaunchMetaDatRegistration -> app.metaDatManager.startRegistration(this@MainActivity)[m
+                     is UiCommand.RequestMetaPermissions -> permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())[m
+[31m-                    is UiCommand.CreateMetaSession -> metaDatManager.createDeviceSession()[m
+[31m-                    is UiCommand.CloseMetaSession -> metaDatManager.closeDeviceSession()[m
+[31m-                    is UiCommand.ReconnectMetaSession -> metaDatManager.reconnectDeviceSession()[m
+[31m-                    is UiCommand.RefreshMetaSession -> metaDatManager.refreshSessionHealth()[m
+[31m-                    is UiCommand.DiscoverMetaCapabilities -> metaDatManager.discoverCapabilities()[m
+[31m-                    is UiCommand.DiscoverMetaAudioApi -> metaDatManager.discoverAudioApi()[m
+[31m-                    is UiCommand.StartBluetoothAudioRoute -> audioRouteManager.startBluetoothRoute()[m
+[31m-                    is UiCommand.StopBluetoothAudioRoute -> audioRouteManager.stopBluetoothRoute()[m
+[32m+[m[32m                    is UiCommand.CreateMetaSession -> app.metaDatManager.createDeviceSession()[m
+[32m+[m[32m                    is UiCommand.CloseMetaSession -> app.metaDatManager.closeDeviceSession()[m
+[32m+[m[32m                    is UiCommand.ReconnectMetaSession -> app.metaDatManager.reconnectDeviceSession()[m
+[32m+[m[32m                    is UiCommand.RefreshMetaSession -> app.metaDatManager.refreshSessionHealth()[m
+[32m+[m[32m                    is UiCommand.DiscoverMetaCapabilities -> app.metaDatManager.discoverCapabilities()[m
+[32m+[m[32m                    is UiCommand.DiscoverMetaAudioApi -> app.metaDatManager.discoverAudioApi()[m
+[32m+[m[32m                    is UiCommand.StartBluetoothAudioRoute -> app.audioRouteManager.startBluetoothRoute()[m
+[32m+[m[32m                    is UiCommand.StopBluetoothAudioRoute -> app.audioRouteManager.stopBluetoothRoute()[m
+                     is UiCommand.CapturePcmSample -> pcmCaptureManager.startCapture()[m
+[31m-                    is UiCommand.StartWearableSpeechTest -> turnCoordinator.startWearableTurn()[m
+[31m-                    is UiCommand.StopWearableSpeechTest -> turnCoordinator.cancelTurn()[m
+[31m-                    is UiCommand.NewSession -> viewModel.startNewSession()[m
+[31m-                    is UiCommand.StartWakeWordTest -> wakeWordManager.startTest()[m
+[31m-                    is UiCommand.StopWakeWordTest -> wakeWordManager.stopTest()[m
+[31m-                    is UiCommand.EnableWakeMode -> wakeTurnCoordinator.setWakeModeEnabled(true)[m
+[31m-                    is UiCommand.DisableWakeMode -> wakeTurnCoordinator.setWakeModeEnabled(false)[m
+[31m-                    is UiCommand.MarkMissedWake -> metricsCollector.onMissedDetection()[m
+[31m-                    is UiCommand.ResetMetrics -> metricsCollector.resetMetrics()[m
+[32m+[m[32m                    is UiCommand.StartWearableSpeechTest -> app.turnCoordinator.startWearableTurn()[m
+[32m+[m[32m                    is UiCommand.StopWearableSpeechTest -> app.turnCoordinator.cancelTurn()[m
+[32m+[m[32m                    is UiCommand.NewSession -> app.bridgeController.startNewSession()[m
+[32m+[m[32m                    is UiCommand.StartWakeWordTest -> app.wakeWordManager.startTest()[m
+[32m+[m[32m                    is UiCommand.StopWakeWordTest -> app.wakeWordManager.stopTest()[m
+[32m+[m[32m                    is UiCommand.EnableWakeMode -> startWakeService()[m
+[32m+[m[32m                    is UiCommand.DisableWakeMode -> stopWakeService()[m
+[32m+[m[32m                    is UiCommand.MarkMissedWake -> app.metricsCollector.onMissedDetection()[m
+[32m+[m[32m                    is UiCommand.ResetMetrics -> app.metricsCollector.resetMetrics()[m
+                     is UiCommand.ExportMetrics -> exportMetrics()[m
+                 }[m
+             }[m
+         }[m
+ [m
+[31m-        // Hardware trigger subscription (Gate 10C)[m
+[31m-        turnTrigger.setListener { event ->[m
+[31m-            Log.d("HermesBridge", "Hardware trigger: ${event.type}")[m
+[31m-            turnCoordinator.startWearableTurn()[m
+[31m-        }[m
+[31m-        [m
+[31m-        metaDatManager.initialize()[m
+[32m+[m[32m        // Hardware trigger[m
+[32m+[m[32m        turnTrigger.setListener { app.turnCoordinator.startWearableTurn() }[m
+         turnTrigger.start()[m
+ [m
+[31m-        // Register battery status receiver[m
+[32m+[m[32m        // Sync coordinators with global state loop (already happening in components)[m
+[32m+[m[41m        [m
+[32m+[m[32m        // Background Service logic: If service is running, it owns the coordinators.[m
+[32m+[m[32m        // For now, let's keep it simple.[m
+[32m+[m
+         registerReceiver(batteryReceiver, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))[m
+ [m
+[31m-        // 5. Inject layouts and Compose Theme[m
+         setContent {[m
+             MaterialTheme {[m
+[31m-                AgentScreen([m
+[31m-                    viewModel = viewModel,[m
+[31m-                    modifier = Modifier.fillMaxSize()[m
+[31m-                )[m
+[32m+[m[32m                AgentScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())[m
+             }[m
+         }[m
+     }[m
+ [m
+[32m+[m[32m    private fun startWakeService() {[m
+[32m+[m[32m        val intent = Intent(this, WakeWordForegroundService::class.java).apply {[m
+[32m+[m[32m            action = WakeWordForegroundService.ACTION_START[m
+[32m+[m[32m        }[m
+[32m+[m[32m        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {[m
+[32m+[m[32m            startForegroundService(intent)[m
+[32m+[m[32m        } else {[m
+[32m+[m[32m            startService(intent)[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun stopWakeService() {[m
+[32m+[m[32m        val intent = Intent(this, WakeWordForegroundService::class.java).apply {[m
+[32m+[m[32m            action = WakeWordForegroundService.ACTION_STOP[m
+[32m+[m[32m        }[m
+[32m+[m[32m        startService(intent)[m
+[32m+[m[32m    }[m
+[32m+[m
+     private fun exportMetrics() {[m
+[31m-        val summary = metricsCollector.generateExportSummary()[m
+[32m+[m[32m        val summary = app.metricsCollector.generateExportSummary()[m
+         val intent = Intent(Intent.ACTION_SEND).apply {[m
+             type = "text/plain"[m
+             putExtra(Intent.EXTRA_SUBJECT, "Hermes Bridge Metrics Export")[m
+[36m@@ -269,41 +159,24 @@[m [mclass MainActivity : ComponentActivity() {[m
+     }[m
+ [m
+     private fun refreshAllStatuses() {[m
+[31m-        if (::metaDatManager.isInitialized) metaDatManager.refreshStatus()[m
+[31m-        if (::audioRouteManager.isInitialized) audioRouteManager.refreshRouteStatus()[m
+[31m-        if (::permissionManager.isInitialized) {[m
+[31m-            val state = permissionManager.checkPermissionState()[m
+[31m-            val msg = when (state) {[m
+[31m-                is PermissionState.Ready -> "Meta Permissions: Ready"[m
+[31m-                is PermissionState.Missing -> "Meta Permissions: Required"[m
+[31m-            }[m
+[31m-            viewModel.updatePermissionMessage(msg)[m
+[31m-        }[m
+[32m+[m[32m        app.metaDatManager.refreshStatus()[m
+[32m+[m[32m        app.audioRouteManager.refreshRouteStatus()[m
+[32m+[m[32m        val state = permissionManager.checkPermissionState()[m
+[32m+[m[32m        val msg = when (state) {[m
+[32m+[m[32m            is PermissionState.Ready -> "Meta Permissions: Ready"[m
+[32m+[m[32m            is PermissionState.Missing -> "Meta Permissions: Required"[m
+[32m+[m[32m        }[m
+[32m+[m[32m        app.bridgeController.updatePermissionMessage(msg)[m
+     }[m
+ [m
+     override fun onStop() {[m
+         super.onStop()[m
+         viewModel.stopSpeaking()[m
+[31m-        if (::wakeTurnCoordinator.isInitialized) {[m
+[31m-            wakeTurnCoordinator.setWakeModeEnabled(false)[m
+[31m-        }[m
+     }[m
+ [m
+     override fun onDestroy() {[m
+         super.onDestroy()[m
+[31m-        try {[m
+[31m-            unregisterReceiver(batteryReceiver)[m
+[31m-        } catch (e: Exception) { }[m
+[31m-        [m
+[31m-        if (::metaDatManager.isInitialized) metaDatManager.closeDeviceSession()[m
+[31m-        if (::audioRouteManager.isInitialized) audioRouteManager.stopBluetoothRoute()[m
+[31m-        if (::pcmCaptureManager.isInitialized) pcmCaptureManager.stopCapture()[m
+[31m-        if (::speechToText.isInitialized) speechToText.destroy()[m
+[31m-        if (::turnTrigger.isInitialized) turnTrigger.stop()[m
+[31m-        if (::wakeWordManager.isInitialized) wakeWordManager.release()[m
+[31m-        if (::wakeTurnCoordinator.isInitialized) wakeTurnCoordinator.stop()[m
+[31m-[m
+[31m-        wearableInputSource.stop()[m
+[31m-        speechOutput?.shutdown()[m
+[32m+[m[32m        try { unregisterReceiver(batteryReceiver) } catch (e: Exception) { }[m
+[32m+[m[32m        turnTrigger.stop()[m
+     }[m
+ }[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/metrics/InteractionMetricsCollector.kt b/app/src/main/java/com/example/hermesbridge/metrics/InteractionMetricsCollector.kt[m
+[1mindex 17383d3..a0492b1 100644[m
+[1m--- a/app/src/main/java/com/example/hermesbridge/metrics/InteractionMetricsCollector.kt[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/metrics/InteractionMetricsCollector.kt[m
+[36m@@ -25,6 +25,34 @@[m [mclass InteractionMetricsCollector(private val context: Context) {[m
+     private var listeningStartTime: Long = 0[m
+     private var bluetoothRouteStartTime: Long = 0[m
+     private var totalBluetoothActiveMs: Long = 0[m
+[32m+[m[32m    private var serviceStartTime: Long = 0[m
+[32m+[m[32m    private var screenOffStartTime: Long = 0[m
+[32m+[m
+[32m+[m[32m    fun onServiceStarted() {[m
+[32m+[m[32m        serviceStartTime = SystemClock.elapsedRealtime()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun onServiceStopped() {[m
+[32m+[m[32m        if (serviceStartTime > 0) {[m
+[32m+[m[32m            val duration = SystemClock.elapsedRealtime() - serviceStartTime[m
+[32m+[m[32m            _reliabilityStats.update { it.copy(serviceRuntimeMs = it.serviceRuntimeMs + duration) }[m
+[32m+[m[32m            serviceStartTime = 0[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun onScreenOff() {[m
+[32m+[m[32m        if (listeningStartTime > 0) {[m
+[32m+[m[32m            screenOffStartTime = SystemClock.elapsedRealtime()[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    fun onScreenOn() {[m
+[32m+[m[32m        if (screenOffStartTime > 0) {[m
+[32m+[m[32m            val duration = SystemClock.elapsedRealtime() - screenOffStartTime[m
+[32m+[m[32m            _reliabilityStats.update { it.copy(screenOffListeningMs = it.screenOffListeningMs + duration) }[m
+[32m+[m[32m            screenOffStartTime = 0[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+ [m
+     fun onWakeModeEnabled() {[m
+         sessionStartTime = SystemClock.elapsedRealtime()[m
+[36m@@ -151,7 +179,9 @@[m [mclass InteractionMetricsCollector(private val context: Context) {[m
+         sb.append("Listening Time: ${stats.totalListeningMs / 1000}s\n")[m
+         sb.append("Detections: ${stats.detections}\n")[m
+         sb.append("True: ${stats.trueDetections}, False: ${stats.falseDetections}, Missed: ${stats.missedDetections}\n")[m
+[31m-        sb.append("False/Hour: ${"%.2f".format(stats.getFalseDetectionsPerHour())}\n\n")[m
+[32m+[m[32m        sb.append("False/Hour: ${"%.2f".format(stats.getFalseDetectionsPerHour())}\n")[m
+[32m+[m[32m        sb.append("Service Runtime: ${stats.serviceRuntimeMs / 1000}s\n")[m
+[32m+[m[32m        sb.append("Screen-off Listening: ${stats.screenOffListeningMs / 1000}s\n\n")[m
+         [m
+         sb.append("--- Latency (Last Turn) ---\n")[m
+         sb.append("Wake Detection: ${lat.getWakeDetectionLatency()}ms\n")[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/service/WakeWordForegroundService.kt b/app/src/main/java/com/example/hermesbridge/service/WakeWordForegroundService.kt[m
+[1mnew file mode 100644[m
+[1mindex 0000000..6b5644e[m
+[1m--- /dev/null[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/service/WakeWordForegroundService.kt[m
+[36m@@ -0,0 +1,144 @@[m
+[32m+[m[32mpackage com.example.hermesbridge.service[m
+[32m+[m
+[32m+[m[32mimport android.app.*[m
+[32m+[m[32mimport android.content.Context[m
+[32m+[m[32mimport android.content.Intent[m
+[32m+[m[32mimport android.content.IntentFilter[m
+[32m+[m[32mimport android.os.Build[m
+[32m+[m[32mimport android.os.IBinder[m
+[32m+[m[32mimport android.util.Log[m
+[32m+[m[32mimport androidx.core.app.NotificationCompat[m
+[32m+[m[32mimport com.example.hermesbridge.MainActivity[m
+[32m+[m[32mimport com.example.hermesbridge.HermesBridgeApp[m
+[32m+[m[32mimport com.example.hermesbridge.wakeword.WakeWordStatus[m
+[32m+[m[32mimport kotlinx.coroutines.*[m
+[32m+[m[32mimport kotlinx.coroutines.flow.collectLatest[m
+[32m+[m
+[32m+[m[32mclass WakeWordForegroundService : Service() {[m
+[32m+[m
+[32m+[m[32m    private val serviceJob = SupervisorJob()[m
+[32m+[m[32m    private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)[m
+[32m+[m
+[32m+[m[32m    private lateinit var app: HermesBridgeApp[m
+[32m+[m
+[32m+[m[32m    private val screenReceiver = object : android.content.BroadcastReceiver() {[m
+[32m+[m[32m        override fun onReceive(context: Context?, intent: Intent?) {[m
+[32m+[m[32m            when (intent?.action) {[m
+[32m+[m[32m                Intent.ACTION_SCREEN_OFF -> app.metricsCollector.onScreenOff()[m
+[32m+[m[32m                Intent.ACTION_SCREEN_ON -> app.metricsCollector.onScreenOn()[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    companion object {[m
+[32m+[m[32m        private const val CHANNEL_ID = "hermes_wake_channel"[m
+[32m+[m[32m        private const val NOTIFICATION_ID = 101[m
+[32m+[m[32m        const val ACTION_START = "START_WAKE"[m
+[32m+[m[32m        const val ACTION_STOP = "STOP_WAKE"[m
+[32m+[m[41m        [m
+[32m+[m[32m        var isRunning = false[m
+[32m+[m[32m            private set[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    override fun onCreate() {[m
+[32m+[m[32m        super.onCreate()[m
+[32m+[m[32m        Log.d("HermesService", "Foreground service onCreate")[m
+[32m+[m[32m        app = application as HermesBridgeApp[m
+[32m+[m[32m        createNotificationChannel()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {[m
+[32m+[m[32m        when (intent?.action) {[m
+[32m+[m[32m            ACTION_START -> {[m
+[32m+[m[32m                if (!isRunning) {[m
+[32m+[m[32m                    startForegroundService()[m
+[32m+[m[32m                }[m
+[32m+[m[32m            }[m
+[32m+[m[32m            ACTION_STOP -> {[m
+[32m+[m[32m                stopWakeMode()[m
+[32m+[m[32m                stopSelf()[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m        return START_NOT_STICKY[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun startForegroundService() {[m
+[32m+[m[32m        isRunning = true[m
+[32m+[m[32m        val notification = createNotification("Hermes Wake Mode Active", "Listening through Meta wearable")[m
+[32m+[m[32m        startForeground(NOTIFICATION_ID, notification)[m
+[32m+[m
+[32m+[m[32m        app.metricsCollector.onServiceStarted()[m
+[32m+[m[32m        val filter = IntentFilter().apply {[m
+[32m+[m[32m            addAction(Intent.ACTION_SCREEN_OFF)[m
+[32m+[m[32m            addAction(Intent.ACTION_SCREEN_ON)[m
+[32m+[m[32m        }[m
+[32m+[m[32m        registerReceiver(screenReceiver, filter)[m
+[32m+[m
+[32m+[m[32m        serviceScope.launch {[m
+[32m+[m[32m            app.wakeTurnCoordinator.setWakeModeEnabled(true)[m
+[32m+[m[32m        }[m
+[32m+[m
+[32m+[m[32m        // Monitor service prerequisites[m
+[32m+[m[32m        serviceScope.launch {[m
+[32m+[m[32m            app.bridgeController.uiState.collectLatest { state ->[m
+[32m+[m[32m                // Stop service if route is lost or session ended and we are in background[m
+[32m+[m[32m                // For now, let the coordinators handle internal retries.[m
+[32m+[m[32m            }[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun stopWakeMode() {[m
+[32m+[m[32m        app.wakeTurnCoordinator.setWakeModeEnabled(false)[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun createNotificationChannel() {[m
+[32m+[m[32m        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {[m
+[32m+[m[32m            val serviceChannel = NotificationChannel([m
+[32m+[m[32m                CHANNEL_ID,[m
+[32m+[m[32m                "Hermes Wake Word Service Channel",[m
+[32m+[m[32m                NotificationManager.IMPORTANCE_LOW[m
+[32m+[m[32m            )[m
+[32m+[m[32m            val manager = getSystemService(NotificationManager::class.java)[m
+[32m+[m[32m            manager.createNotificationChannel(serviceChannel)[m
+[32m+[m[32m        }[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    private fun createNotification(title: String, text: String): Notification {[m
+[32m+[m[32m        val notificationIntent = Intent(this, MainActivity::class.java)[m
+[32m+[m[32m        val pendingIntent = PendingIntent.getActivity([m
+[32m+[m[32m            this, 0, notificationIntent,[m
+[32m+[m[32m            PendingIntent.FLAG_IMMUTABLE[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        val stopIntent = Intent(this, WakeWordForegroundService::class.java).apply {[m
+[32m+[m[32m            action = ACTION_STOP[m
+[32m+[m[32m        }[m
+[32m+[m[32m        val stopPendingIntent = PendingIntent.getService([m
+[32m+[m[32m            this, 0, stopIntent,[m
+[32m+[m[32m            PendingIntent.FLAG_IMMUTABLE[m
+[32m+[m[32m        )[m
+[32m+[m
+[32m+[m[32m        return NotificationCompat.Builder(this, CHANNEL_ID)[m
+[32m+[m[32m            .setContentTitle(title)[m
+[32m+[m[32m            .setContentText(text)[m
+[32m+[m[32m            .setSmallIcon(android.R.drawable.ic_btn_speak_now)[m
+[32m+[m[32m            .setContentIntent(pendingIntent)[m
+[32m+[m[32m            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Wake Mode", stopPendingIntent)[m
+[32m+[m[32m            .setOngoing(true)[m
+[32m+[m[32m            .build()[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    override fun onBind(intent: Intent?): IBinder? = null[m
+[32m+[m
+[32m+[m[32m    override fun onDestroy() {[m
+[32m+[m[32m        super.onDestroy()[m
+[32m+[m[32m        Log.d("HermesService", "Foreground service onDestroy")[m
+[32m+[m[32m        stopWakeMode()[m
+[32m+[m[32m        app.metricsCollector.onServiceStopped()[m
+[32m+[m[32m        try {[m
+[32m+[m[32m            unregisterReceiver(screenReceiver)[m
+[32m+[m[32m        } catch (e: Exception) { }[m
+[32m+[m[32m        isRunning = false[m
+[32m+[m[32m        serviceJob.cancel()[m
+[32m+[m[32m    }[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/src/main/java/com/example/hermesbridge/wakeword/WakeWordConversationCoordinator.kt b/app/src/main/java/com/example/hermesbridge/wakeword/WakeWordConversationCoordinator.kt[m
+[1mindex 0fc0c30..2fc027d 100644[m
+[1m--- a/app/src/main/java/com/example/hermesbridge/wakeword/WakeWordConversationCoordinator.kt[m
+[1m+++ b/app/src/main/java/com/example/hermesbridge/wakeword/WakeWordConversationCoordinator.kt[m
+[36m@@ -1,7 +1,7 @@[m
+ package com.example.hermesbridge.wakeword[m
+ [m
+ import android.util.Log[m
+[31m-import com.example.hermesbridge.AgentViewModel[m
+[32m+[m[32mimport com.example.hermesbridge.BridgeController[m
+ import com.example.hermesbridge.conversation.ConversationTurnCoordinator[m
+ import com.example.hermesbridge.conversation.ConversationTurnState[m
+ import com.example.hermesbridge.metrics.InteractionMetricsCollector[m
+[36m@@ -14,7 +14,7 @@[m [mimport kotlinx.coroutines.flow.collectLatest[m
+ [m
+ class WakeWordConversationCoordinator([m
+     private val scope: CoroutineScope,[m
+[31m-    private val viewModel: AgentViewModel,[m
+[32m+[m[32m    private val controller: BridgeController,[m
+     private val wakeWordManager: WakeWordTestManager,[m
+     private val turnCoordinator: ConversationTurnCoordinator,[m
+     private val metricsCollector: InteractionMetricsCollector? = null[m
+[36m@@ -84,9 +84,9 @@[m [mclass WakeWordConversationCoordinator([m
+                 }[m
+             }[m
+ [m
+[31m-            // Monitor TTS speaking state (for manual turns)[m
+[32m+[m[32m            // Monitor TTS speaking state (via controller)[m
+             launch {[m
+[31m-                viewModel.uiState.collectLatest { state ->[m
+[32m+[m[32m                controller.uiState.collectLatest { state ->[m
+                     if (state.isTtsSpeaking) {[m
+                         if (wakeWordManager.status.value is WakeWordStatus.Listening) {[m
+                             Log.d("HermesWakeCoord", "TTS active, pausing wake detection.")[m

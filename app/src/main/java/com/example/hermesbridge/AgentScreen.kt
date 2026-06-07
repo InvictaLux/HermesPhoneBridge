@@ -33,6 +33,7 @@ import com.example.hermesbridge.meta.MetaDatStatus
 import com.example.hermesbridge.audio.BluetoothAudioRouteStatus
 import com.example.hermesbridge.audio.PcmCaptureStatus
 import com.example.hermesbridge.wakeword.WakeWordStatus
+import com.example.hermesbridge.onboarding.OnboardingScreen
 
 // Theme Colors
 private val DarkBackground = Color(0xFF000000)
@@ -65,7 +66,11 @@ fun AgentScreen(
             secondary = SecondaryText
         )
     ) {
-        AppShell(state, viewModel, modifier)
+        if (!state.isOnboardingCompleted) {
+            OnboardingScreen(viewModel = viewModel, state = state)
+        } else {
+            AppShell(state, viewModel, modifier)
+        }
     }
 }
 
@@ -145,6 +150,14 @@ fun AppShell(
                         AppScreen.Library -> LibraryScreen()
                     }
                 }
+            }
+
+            if (state.serviceVisit.arrivalConfirmationRequired) {
+                PoolSelectionMenu(
+                    candidates = state.serviceVisit.candidatePools,
+                    onSelected = { viewModel.onPoolSelected(it) },
+                    onDismiss = { /* Hide logic if needed */ }
+                )
             }
 
             if (showPlusMenu) {
@@ -263,36 +276,47 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
     ) {
         Spacer(modifier = Modifier.height(SpacingCompact))
         
-        Text(
-            text = "Field Assistant",
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = state.serviceVisit.userProfile?.displayName ?: "Field Assistant",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    text = "Role: ${state.serviceVisit.userProfile?.userRole ?: "cleaner"}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SecondaryText
+                )
+            }
+            if (state.serviceVisit.syncedPools.isEmpty()) {
+                IconButton(onClick = { viewModel.onSyncRouteClicked() }) {
+                    Icon(Icons.Default.Sync, contentDescription = "Sync Route", tint = AccentColor)
+                }
+            }
+        }
 
-        LargeActionCard(
-            title = "Ask AI Assistant",
-            subtitle = "Hands-free with glasses or type below",
-            icon = Icons.Default.Mic,
-            onClick = { viewModel.onNavigateTo(AppScreen.Chat) }
-        )
+        if (state.serviceVisit.flowState != com.example.hermesbridge.serviceentry.ServiceFlowState.OffRoute) {
+            ServiceVisitCard(state.serviceVisit)
+        } else {
+            LargeActionCard(
+                title = "Detect Current Pool",
+                subtitle = "Find nearest pool by GPS",
+                icon = Icons.Default.LocationOn,
+                onClick = { viewModel.onDetectCurrentPoolClicked() }
+            )
+        }
 
-        Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
-            SectionHeader("Next Stop")
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = CardBackground),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.padding(SpacingStandard),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("123 Blue Pool Ln", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                        Text("Regular Maintenance • Scheduled 10:00 AM", style = MaterialTheme.typography.bodySmall, color = SecondaryText)
-                    }
-                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SecondaryText)
+        if (state.serviceVisit.syncedPools.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
+                SectionHeader("Assigned Route")
+                state.serviceVisit.syncedPools.forEach { pool ->
+                    PoolListItem(pool, onSelect = { viewModel.onPoolSelected(pool) })
                 }
             }
         }
@@ -301,19 +325,40 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
             SectionHeader("Quick Actions")
             QuickActionGrid()
         }
+        
+        Spacer(modifier = Modifier.height(SpacingMajor * 2))
+    }
+}
 
-        Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
-            SectionHeader("Recent Activity")
-            if (state.conversationHistory.isEmpty()) {
-                Text("No recent activity.", style = MaterialTheme.typography.bodySmall, color = SecondaryText, modifier = Modifier.padding(vertical = SpacingCompact))
-            } else {
-                state.conversationHistory.take(1).forEach { turn ->
-                    RecentActivityItem("Assistant", turn.inputText)
+@Composable
+fun PoolListItem(pool: PoolRecord, onSelect: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(SpacingStandard),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(32.dp),
+                shape = CircleShape,
+                color = AccentColor.copy(alpha = 0.1f)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(pool.stopOrder.toString(), style = MaterialTheme.typography.labelSmall, color = AccentColor, fontWeight = FontWeight.Bold)
                 }
             }
+            Spacer(modifier = Modifier.width(SpacingStandard))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(pool.customerName, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Text(pool.serviceAddress, style = MaterialTheme.typography.labelSmall, color = SecondaryText, maxLines = 1)
+            }
+            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SecondaryText)
         }
-        
-        Spacer(modifier = Modifier.height(SpacingMajor * 2)) // Padding for FAB
     }
 }
 
@@ -807,17 +852,20 @@ fun DiagnosticsPanel(
 
         Text("APP DATA", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(SpacingCompact)) {
+            Button(onClick = { viewModel.onSyncRouteClicked() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) {
+                Text("Sync Route", fontSize = 10.sp)
+            }
             Button(onClick = { viewModel.onClearDraftClicked() }, modifier = Modifier.weight(1f), shape = RoundedCornerShape(8.dp)) {
                 Text("Clear Draft", fontSize = 10.sp)
             }
-            Button(
-                onClick = { viewModel.onResetSettingsClicked() },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
-                shape = RoundedCornerShape(8.dp)
-            ) {
-                Text("Reset All", fontSize = 10.sp)
-            }
+        }
+        Button(
+            onClick = { viewModel.onResetSettingsClicked() },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Red),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Reset All Settings", fontSize = 10.sp)
         }
 
         Text("WAKE WORD TUNING", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
@@ -851,6 +899,13 @@ fun DiagnosticsPanel(
         }
 
         Button(
+            onClick = { viewModel.onTriggerLocationHandshake() },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Simulate McCullough GPS Arrival", fontSize = 10.sp)
+        }
+        
+        Button(
             onClick = { viewModel.onStartWearableSpeechTestClicked() },
             modifier = Modifier.fillMaxWidth(),
             enabled = state.metaDatStatus is MetaDatStatus.SessionReady && 
@@ -862,6 +917,143 @@ fun DiagnosticsPanel(
         
         Spacer(modifier = Modifier.height(SpacingStandard))
     }
+}
+
+@Composable
+fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        shape = RoundedCornerShape(12.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(SpacingStandard)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Top
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = state.activePool?.customerName ?: "Unknown Pool",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = state.activePool?.serviceAddress ?: "No address",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SecondaryText
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(AccentColor.copy(alpha = 0.1f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = (state.backendServiceStatus ?: state.flowState.name).uppercase(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 8.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(SpacingCompact))
+            Row(horizontalArrangement = Arrangement.spacedBy(SpacingStandard)) {
+                Text(
+                    text = "VOL: ${state.activePool?.workingVolumeGallons} gal",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SecondaryText
+                )
+                if (state.visitId != null) {
+                    Text(
+                        text = "VISIT ID: ${state.visitId.takeLast(8)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SecondaryText
+                    )
+                }
+            }
+            
+            if (state.isReadyForReadings) {
+                Spacer(modifier = Modifier.height(SpacingStandard))
+                Text("WATER TEST", style = MaterialTheme.typography.labelSmall, color = SecondaryText, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    ReadingMiniTag("CL", state.currentReadings.freeChlorine)
+                    ReadingMiniTag("PH", state.currentReadings.ph)
+                    ReadingMiniTag("TA", state.currentReadings.totalAlkalinity)
+                    ReadingMiniTag("CH", state.currentReadings.calciumHardness)
+                }
+            }
+
+            if (state.recommendations.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(SpacingStandard))
+                Text("RECOMMENDED TREATMENT", style = MaterialTheme.typography.labelSmall, color = AccentColor, fontWeight = FontWeight.Bold)
+                state.recommendations.forEach { rec ->
+                    val prodName = rec.name ?: rec.productId.replace("_", " ")
+                    Text(
+                        text = "• ${rec.amount} ${rec.unit} $prodName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ReadingMiniTag(label: String, value: Float?) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 8.sp, color = SecondaryText)
+        Text(
+            text = if (value == 0.0f) "0.0" else value?.toString() ?: "--",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (value != null) Color.White else Color.DarkGray
+        )
+    }
+}
+
+@Composable
+fun PoolSelectionMenu(
+    candidates: List<com.example.hermesbridge.PoolRecord>,
+    onSelected: (com.example.hermesbridge.PoolRecord) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Confirm Arrival") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                candidates.forEach { pool ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelected(pool) },
+                        colors = CardDefaults.cardColors(containerColor = CardBackground)
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(pool.customerName, fontWeight = FontWeight.Bold)
+                            Text(pool.serviceAddress, style = MaterialTheme.typography.labelSmall, color = SecondaryText)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+        containerColor = DarkBackground,
+        titleContentColor = Color.White,
+        textContentColor = Color.White
+    )
 }
 
 @Preview(showBackground = true)

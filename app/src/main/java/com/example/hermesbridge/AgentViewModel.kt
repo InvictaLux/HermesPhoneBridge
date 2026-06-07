@@ -54,6 +54,14 @@ sealed class UiCommand {
     data class SetMediaResumePolicy(val policy: com.example.hermesbridge.media.MediaResumePolicy) : UiCommand()
     object ResetSettings : UiCommand()
     object ClearDraft : UiCommand()
+    object TriggerLocationHandshake : UiCommand()
+    object DetectCurrentPool : UiCommand()
+    object SyncRoute : UiCommand()
+    data class SelectPool(val pool: com.example.hermesbridge.PoolRecord) : UiCommand()
+    object CompleteOnboarding : UiCommand()
+    object ResetOnboarding : UiCommand()
+    object NextOnboardingStep : UiCommand()
+    object PreviousOnboardingStep : UiCommand()
 }
 
 class AgentViewModel(
@@ -117,6 +125,10 @@ class AgentViewModel(
         }
     }
 
+    fun onNavigateTo(screen: AppScreen) {
+        controller.navigateTo(screen)
+    }
+
     fun onResetSettingsClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.ResetSettings)
@@ -127,6 +139,46 @@ class AgentViewModel(
         viewModelScope.launch {
             _commands.emit(UiCommand.ClearDraft)
         }
+    }
+
+    fun onTriggerLocationHandshake() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.TriggerLocationHandshake)
+        }
+    }
+
+    fun onDetectCurrentPoolClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.DetectCurrentPool)
+        }
+    }
+
+    fun onSyncRouteClicked() {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.SyncRoute)
+        }
+    }
+
+    fun onPoolSelected(pool: com.example.hermesbridge.PoolRecord) {
+        viewModelScope.launch {
+            _commands.emit(UiCommand.SelectPool(pool))
+        }
+    }
+
+    fun onCompleteOnboarding() {
+        viewModelScope.launch { _commands.emit(UiCommand.CompleteOnboarding) }
+    }
+
+    fun onResetOnboarding() {
+        viewModelScope.launch { _commands.emit(UiCommand.ResetOnboarding) }
+    }
+
+    fun onNextOnboardingStep() {
+        viewModelScope.launch { _commands.emit(UiCommand.NextOnboardingStep) }
+    }
+
+    fun onPreviousOnboardingStep() {
+        viewModelScope.launch { _commands.emit(UiCommand.PreviousOnboardingStep) }
     }
 
     fun onTogglePauseWakeClicked() {

@@ -1,0 +1,14 @@
+{
+  "device_id": "pixel10a-dev-001",
+  "session_id": "test-session-123",
+  "text": "Service arrival at McCullough",
+  "timestamp": "2026-06-06T12:00:00Z",
+  "event_type": "service_arrival",
+  "user_id": "tech_001",
+  "pool_id": "pool_mccullough",
+  "location": {
+    "latitude": 34.0522,
+    "longitude": -118.2437,
+    "accuracy_meters": 10.0
+  }
+}
