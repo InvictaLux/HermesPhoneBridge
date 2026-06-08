@@ -71,7 +71,22 @@ data class HistoricalChemistryContext(
     @SerializedName("previous_visit_date") val previousVisitDate: String?,
     @SerializedName("previous_readings") val previousReadings: PreviousReadings?,
     @SerializedName("trend_summary") val trendSummary: List<String>?
-)
+) {
+    fun getTrendsForDisplay(limit: Int = 3): List<String> {
+        return trendSummary?.take(limit) ?: emptyList()
+    }
+
+    fun getMoreTrendsCount(limit: Int = 3): Int {
+        val total = trendSummary?.size ?: 0
+        return if (total > limit) total - limit else 0
+    }
+
+    fun getTrendsForSpeech(limit: Int = 2): String {
+        val selected = trendSummary?.take(limit) ?: emptyList()
+        if (selected.isEmpty()) return ""
+        return "Compared with last visit, ${selected.joinToString(" ")}"
+    }
+}
 
 data class PreviousReadings(
     @SerializedName("free_chlorine") val freeChlorine: Float?,

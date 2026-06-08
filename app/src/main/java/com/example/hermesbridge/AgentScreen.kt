@@ -302,7 +302,7 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
         }
 
         if (state.serviceVisit.flowState != com.example.hermesbridge.serviceentry.ServiceFlowState.OffRoute) {
-            ServiceVisitCard(state.serviceVisit)
+            ServiceVisitCard(state.serviceVisit, viewModel)
         } else {
             LargeActionCard(
                 title = "Detect Current Pool",
@@ -920,9 +920,8 @@ fun DiagnosticsPanel(
 }
 
 @Composable
-fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState) {
+fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState, viewModel: AgentViewModel) {
     var showTreatmentPlan by remember { mutableStateOf(state.historicalContext == null) }
-    var planConfirmed by remember { mutableStateOf(false) }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1076,10 +1075,10 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
                     )
                 }
 
-                if (!planConfirmed) {
+                if (!state.treatmentPlanConfirmed) {
                     Spacer(modifier = Modifier.height(SpacingSmall))
                     Button(
-                        onClick = { planConfirmed = true },
+                        onClick = { viewModel.onConfirmTreatmentPlanClicked() },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
@@ -1100,6 +1099,33 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
                             color = Color.Green,
                             fontWeight = FontWeight.Bold
                         )
+                    }
+
+                    if (!state.serviceLogReady) {
+                        Spacer(modifier = Modifier.height(SpacingSmall))
+                        Button(
+                            onClick = { viewModel.onMarkServiceLogReadyClicked() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                        ) {
+                            Text("Ready to Log Service", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(SpacingSmall))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.CloudUpload, contentDescription = null, tint = AccentColor, modifier = Modifier.size(16.dp))
+                            Text(
+                                text = "Service log ready. Final completion step pending.",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = AccentColor,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
             }

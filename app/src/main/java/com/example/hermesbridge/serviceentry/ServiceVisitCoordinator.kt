@@ -64,7 +64,9 @@ class ServiceVisitCoordinator(
                     flowState = ServiceFlowState.OffRoute,
                     userProfile = response.user,
                     routeId = response.route.routeId,
-                    syncedPools = response.route.pools.sortedBy { p -> p.stopOrder }
+                    syncedPools = response.route.pools.sortedBy { p -> p.stopOrder },
+                    treatmentPlanConfirmed = false,
+                    serviceLogReady = false
                 )}
                 controller.updateMetaDatMessage("Route synced: ${response.route.routeName}")
                 if (response.speak == true) {
@@ -89,6 +91,14 @@ class ServiceVisitCoordinator(
 
     fun simulateMcCulloughArrival() {
         processLocationMatch(34.0522, -118.2437, 10f)
+    }
+
+    fun confirmTreatmentPlan() {
+        _state.update { it.copy(treatmentPlanConfirmed = true) }
+    }
+
+    fun markServiceLogReady() {
+        _state.update { it.copy(serviceLogReady = true) }
     }
 
     private fun processLocationMatch(lat: Double, lon: Double, accuracy: Float) {
@@ -128,7 +138,9 @@ class ServiceVisitCoordinator(
         _state.update { it.copy(
             flowState = ServiceFlowState.ServiceRecordOpening,
             activePool = pool,
-            arrivalConfirmationRequired = false
+            arrivalConfirmationRequired = false,
+            treatmentPlanConfirmed = false,
+            serviceLogReady = false
         )}
         performArrivalHandshake(pool)
     }
@@ -178,7 +190,12 @@ class ServiceVisitCoordinator(
                 onPoolSelected(currentState.activePool)
                 return true
             } else if (act == ReadingConfirmationAction.Reject) {
-                _state.update { it.copy(flowState = ServiceFlowState.OffRoute, arrivalConfirmationRequired = false) }
+                _state.update { it.copy(
+                    flowState = ServiceFlowState.OffRoute, 
+                    arrivalConfirmationRequired = false,
+                    treatmentPlanConfirmed = false,
+                    serviceLogReady = false
+                ) }
                 controller.speakResponse("Standing by.")
                 return true
             }
@@ -199,7 +216,9 @@ class ServiceVisitCoordinator(
                 } else if (action == ReadingConfirmationAction.Reject) {
                     _state.update { it.copy(
                         flowState = ServiceFlowState.WaitingForReadings,
-                        currentReadings = ParsedWaterTest()
+                        currentReadings = ParsedWaterTest(),
+                        treatmentPlanConfirmed = false,
+                        serviceLogReady = false
                     )}
                     controller.speakResponse("Start over. Standing by for readings.")
                     return true
@@ -251,7 +270,11 @@ class ServiceVisitCoordinator(
 
     private fun submitReadings() {
         val currentState = _state.value
-        _state.update { it.copy(flowState = ServiceFlowState.SavingReadings) }
+        _state.update { it.copy(
+            flowState = ServiceFlowState.SavingReadings, 
+            treatmentPlanConfirmed = false,
+            serviceLogReady = false
+        ) }
         controller.speakResponse("Saving the results.")
 
         scope.launch {
@@ -296,9 +319,9 @@ class ServiceVisitCoordinator(
                     historicalContext = response.historicalContext
                 )}
                 
-                val speakText = if (response.historicalContext?.trendSummary?.isNotEmpty() == true) {
-                    val summary = response.historicalContext.trendSummary.joinToString(" ")
-                    "Compared with last visit, $summary ${response.finalResponseText}"
+                val speakText = if (response.historicalContext != null) {
+                    val trends = response.historicalContext.getTrendsForSpeech(limit = 2)
+                    if (trends.isNotEmpty()) "$trends ${response.finalResponseText}" else response.finalResponseText
                 } else {
                     response.finalResponseText
                 }
@@ -344,4 +367,14 @@ class ServiceVisitCoordinator(
         return sdf.format(Date())
     }
 
-    private fun calculateDistanceFeet(lat1: Double, lon1: Double, lat2: Double, lon2: 
+    private fun calculateDistanceFeet(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val r = 6371000.0
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        val c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+        return (r * c) * 3.28084
+    }
+}

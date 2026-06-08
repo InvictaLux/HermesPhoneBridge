@@ -62,6 +62,8 @@ sealed class UiCommand {
     object ResetOnboarding : UiCommand()
     object NextOnboardingStep : UiCommand()
     object PreviousOnboardingStep : UiCommand()
+    object ConfirmTreatmentPlan : UiCommand()
+    object MarkServiceLogReady : UiCommand()
 }
 
 class AgentViewModel(
@@ -179,6 +181,14 @@ class AgentViewModel(
 
     fun onPreviousOnboardingStep() {
         viewModelScope.launch { _commands.emit(UiCommand.PreviousOnboardingStep) }
+    }
+
+    fun onConfirmTreatmentPlanClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.ConfirmTreatmentPlan) }
+    }
+
+    fun onMarkServiceLogReadyClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.MarkServiceLogReady) }
     }
 
     fun onTogglePauseWakeClicked() {

@@ -151,6 +151,8 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.ResetOnboarding -> app.bridgeController.resetOnboarding()
                     is UiCommand.NextOnboardingStep -> app.bridgeController.nextOnboardingStep()
                     is UiCommand.PreviousOnboardingStep -> app.bridgeController.previousOnboardingStep()
+                    is UiCommand.ConfirmTreatmentPlan -> app.serviceVisitCoordinator.confirmTreatmentPlan()
+                    is UiCommand.MarkServiceLogReady -> app.serviceVisitCoordinator.markServiceLogReady()
                 }
             }
         }
