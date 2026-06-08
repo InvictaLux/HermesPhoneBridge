@@ -921,6 +921,9 @@ fun DiagnosticsPanel(
 
 @Composable
 fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState) {
+    var showTreatmentPlan by remember { mutableStateOf(state.historicalContext == null) }
+    var planConfirmed by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
@@ -991,7 +994,76 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
                 }
             }
 
-            if (state.recommendations.isNotEmpty()) {
+            state.historicalContext?.let { context ->
+                Spacer(modifier = Modifier.height(SpacingStandard))
+                Text("HISTORICAL CONTEXT", style = MaterialTheme.typography.labelSmall, color = SecondaryText, fontWeight = FontWeight.Bold)
+                
+                context.previousVisitDate?.let { date ->
+                    Text("Previous Visit: $date", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                }
+                
+                context.previousReadings?.let { prev ->
+                    if (prev.freeChlorine != null || prev.ph != null || prev.totalAlkalinity != null) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            ReadingMiniTag("CL", prev.freeChlorine)
+                            ReadingMiniTag("PH", prev.ph)
+                            ReadingMiniTag("TA", prev.totalAlkalinity)
+                        }
+                    }
+                }
+                
+                val displayTrends = context.getTrendsForDisplay(limit = 3)
+                if (displayTrends.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(SpacingCompact))
+                    displayTrends.forEach { trend ->
+                        Text(
+                            text = "• $trend",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SecondaryText,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    val moreCount = context.getMoreTrendsCount(limit = 3)
+                    if (moreCount > 0) {
+                        Text(
+                            text = "+$moreCount more",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.DarkGray,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+
+                    // F13D: History-informed note
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    Text(
+                        text = "Use history as context before confirming treatment.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = AccentColor,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic
+                    )
+                }
+
+                // F13D: Review Treatment Plan Button
+                if (state.recommendations.isNotEmpty() && !showTreatmentPlan) {
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    OutlinedButton(
+                        onClick = { showTreatmentPlan = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = AccentColor)
+                    ) {
+                        Icon(Icons.Default.ArrowDownward, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Review Treatment Plan", fontSize = 11.sp)
+                    }
+                }
+            }
+
+            if (state.recommendations.isNotEmpty() && showTreatmentPlan) {
                 Spacer(modifier = Modifier.height(SpacingStandard))
                 Text("RECOMMENDED TREATMENT", style = MaterialTheme.typography.labelSmall, color = AccentColor, fontWeight = FontWeight.Bold)
                 state.recommendations.forEach { rec ->
@@ -1002,6 +1074,33 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
                         color = Color.White,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+                }
+
+                if (!planConfirmed) {
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    Button(
+                        onClick = { planConfirmed = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                    ) {
+                        Text("Confirm Treatment Plan", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Green, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "Treatment plan confirmed. Ready to log service.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Green,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }
