@@ -41,4 +41,22 @@ class MetaPermissionManager(private val context: Context) {
     }
 
     fun isReady(): Boolean = checkPermissionState() is PermissionState.Ready
+
+    fun isBluetoothGranted(): Boolean {
+        return requiredPermissions.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    fun isMicrophoneGranted(): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun isNotificationsGranted(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        } else {
+            true
+        }
+    }
 }

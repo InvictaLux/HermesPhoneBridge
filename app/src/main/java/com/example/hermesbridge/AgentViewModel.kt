@@ -18,6 +18,9 @@ import com.example.hermesbridge.wakeword.WakeWordDetection
 import com.example.hermesbridge.metrics.WakeReliabilityStats
 import com.example.hermesbridge.metrics.LatencyBreakdown
 import com.example.hermesbridge.metrics.BatterySnapshot
+import com.example.hermesbridge.onboarding.OnboardingStep
+import com.example.hermesbridge.onboarding.StepStatus
+import com.example.hermesbridge.serviceentry.ServiceVisitState
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -62,6 +65,16 @@ sealed class UiCommand {
     object ResetOnboarding : UiCommand()
     object NextOnboardingStep : UiCommand()
     object PreviousOnboardingStep : UiCommand()
+    object RequestBluetoothPermissions : UiCommand()
+    object RequestMicrophonePermission : UiCommand()
+    object RequestNotificationPermission : UiCommand()
+    object OpenAppSettings : UiCommand()
+    object ConfirmTreatmentPlan : UiCommand()
+    object MarkServiceLogReady : UiCommand()
+    data class UpdateTechnicianNotes(val notes: String) : UiCommand()
+    object SubmitServiceCompletion : UiCommand()
+    object StartManualVoiceTurn : UiCommand()
+    object StopVoiceTurn : UiCommand()
 }
 
 class AgentViewModel(
@@ -111,6 +124,14 @@ class AgentViewModel(
 
     fun onMarkDeliberateWakeClicked() {
         controller.onDeliberateAttempt()
+    }
+
+    fun onStartVoiceSessionClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.StartManualVoiceTurn) }
+    }
+
+    fun onStopVoiceSessionClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.StopVoiceTurn) }
     }
 
     fun onResetMetricsClicked() {
@@ -181,6 +202,14 @@ class AgentViewModel(
         viewModelScope.launch { _commands.emit(UiCommand.PreviousOnboardingStep) }
     }
 
+    fun onConfirmTreatmentPlanClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.ConfirmTreatmentPlan) }
+    }
+
+    fun onMarkServiceLogReadyClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.MarkServiceLogReady) }
+    }
+
     fun onTogglePauseWakeClicked() {
         viewModelScope.launch {
             _commands.emit(UiCommand.TogglePauseWake)
@@ -236,7 +265,21 @@ class AgentViewModel(
     }
 
     fun onRegisterMetaDatClicked() { viewModelScope.launch { _commands.emit(UiCommand.LaunchMetaDatRegistration) } }
-    fun onGrantPermissionsClicked() { viewModelScope.launch { _commands.emit(UiCommand.RequestMetaPermissions) } }
+    fun onGrantPermissionsClicked() { 
+        viewModelScope.launch { 
+            when (uiState.value.currentOnboardingStep) {
+                OnboardingStep.BluetoothPermissions -> _commands.emit(UiCommand.RequestBluetoothPermissions)
+                OnboardingStep.MicrophonePermission -> _commands.emit(UiCommand.RequestMicrophonePermission)
+                OnboardingStep.NotificationPermission -> _commands.emit(UiCommand.RequestNotificationPermission)
+                else -> _commands.emit(UiCommand.RequestMetaPermissions)
+            }
+        } 
+    }
+    
+    fun onOpenAppSettingsClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.OpenAppSettings) }
+    }
+
     fun onCreateSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.CreateMetaSession) } }
     fun onCloseSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.CloseMetaSession) } }
     fun onReconnectSessionClicked() { viewModelScope.launch { _commands.emit(UiCommand.ReconnectMetaSession) } }
@@ -258,6 +301,48 @@ class AgentViewModel(
                 prefsRepository.updateChatDraft(newText)
             }
         }
+    }
+
+    fun onVisitInspectorIdChanged(newId: String) {
+        controller.updateVisitInspectorId(newId)
+    }
+
+    fun onLookupVisitClicked() {
+        controller.lookupServiceVisit(uiState.value.visitInspectorId)
+    }
+
+    fun onHistoryDateSelected(dateIso: String) {
+        controller.updateHistoryDate(dateIso)
+        // If a pool is selected, trigger lookup for the new date
+        uiState.value.selectedHistoryPoolId?.let {
+            controller.lookupPoolHistory(it, dateIso)
+        }
+    }
+
+    fun onHistoryPoolSelected(poolId: String?) {
+        controller.updateHistoryPoolId(poolId)
+        if (poolId != null) {
+            controller.lookupPoolHistory(poolId, uiState.value.selectedHistoryDate)
+        }
+    }
+
+    fun onLoadMoreHistory(poolId: String) {
+        val currentCount = uiState.value.historyResults[poolId]?.size ?: 0
+        controller.lookupPoolHistory(poolId, uiState.value.selectedHistoryDate, offset = currentCount)
+    }
+
+    fun onHistoryRecordClicked(record: ServiceHistoryRecord) {
+        controller.updateVisitInspectorId(record.visitId)
+        controller.lookupServiceVisit(record.visitId, record.poolId)
+        controller.navigateTo(AppScreen.VisitInspector)
+    }
+
+    fun onTechnicianNotesChanged(newNotes: String) {
+        viewModelScope.launch { _commands.emit(UiCommand.UpdateTechnicianNotes(newNotes)) }
+    }
+
+    fun onSubmitServiceCompletionClicked() {
+        viewModelScope.launch { _commands.emit(UiCommand.SubmitServiceCompletion) }
     }
     
     fun submitScreenInput() {

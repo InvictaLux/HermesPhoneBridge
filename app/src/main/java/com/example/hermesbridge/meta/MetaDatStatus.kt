@@ -19,6 +19,8 @@ sealed class MetaDatStatus {
     object SessionDisconnected : MetaDatStatus()
     object SessionReconnecting : MetaDatStatus()
     object NoDeviceFound : MetaDatStatus()
+    object SearchingDevices : MetaDatStatus()
+    data class DeviceFound(val name: String) : MetaDatStatus()
     data class SessionError(val message: String) : MetaDatStatus()
 
     data class Error(val message: String) : MetaDatStatus()
@@ -41,6 +43,8 @@ sealed class MetaDatStatus {
         is SessionDisconnected -> "Meta Session: Disconnected"
         is SessionReconnecting -> "Meta Session: Reconnecting..."
         is NoDeviceFound -> "Meta Session: No paired glasses found"
+        is SearchingDevices -> "Meta Session: Searching paired devices..."
+        is DeviceFound -> "Meta Session: Found $name"
         is SessionError -> "Meta Session Error: $message"
 
         is Error -> "Meta DAT: Error: $message"

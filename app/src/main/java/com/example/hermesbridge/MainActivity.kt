@@ -39,14 +39,37 @@ class MainActivity : ComponentActivity() {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
+        Log.d("OnboardingBluetooth", "Permission result received: $results")
         val denied = results.filter { !it.value }.keys
         if (denied.isEmpty()) {
-            Log.d("HermesBridge", "All permissions granted.")
+            Log.d("OnboardingBluetooth", "All permissions granted.")
             refreshAllStatuses()
         } else {
-            Log.w("HermesBridge", "Permissions denied: $denied")
+            Log.w("OnboardingBluetooth", "Permissions denied: $denied")
             app.bridgeController.updatePermissionMessage("Permissions denied: ${denied.joinToString(", ")}")
+            
+            // Check for permanent denial
+            val stillDenied = denied.any { 
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    !shouldShowRequestPermissionRationale(it)
+                } else {
+                    false
+                }
+            }
+            if (stillDenied) {
+                Log.w("OnboardingBluetooth", "Some permissions permanently denied.")
+                app.bridgeController.updatePermissionMessage("Permanently denied. Please enable in Settings.")
+            }
         }
+        updatePermissionFlagsInController()
+    }
+
+    private fun updatePermissionFlagsInController() {
+        app.bridgeController.updatePermissionStates(
+            bluetooth = permissionManager.isBluetoothGranted(),
+            microphone = permissionManager.isMicrophoneGranted(),
+            notifications = permissionManager.isNotificationsGranted()
+        )
     }
 
     private val batteryReceiver = object : android.content.BroadcastReceiver() {
@@ -85,6 +108,27 @@ class MainActivity : ComponentActivity() {
                 when (command) {
                     is UiCommand.LaunchMetaDatRegistration -> app.metaDatManager.startRegistration(this@MainActivity)
                     is UiCommand.RequestMetaPermissions -> permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
+                    is UiCommand.RequestBluetoothPermissions -> {
+                        Log.d("OnboardingBluetooth", "Grant button pressed - Required permissions: ${permissionManager.requiredPermissions}")
+                        permissionLauncher.launch(permissionManager.requiredPermissions.toTypedArray())
+                    }
+                    is UiCommand.RequestMicrophonePermission -> {
+                        Log.d("OnboardingBluetooth", "Launching microphone permission request")
+                        permissionLauncher.launch(arrayOf(android.Manifest.permission.RECORD_AUDIO))
+                    }
+                    is UiCommand.RequestNotificationPermission -> {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            Log.d("OnboardingBluetooth", "Launching notification permission request")
+                            permissionLauncher.launch(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS))
+                        }
+                    }
+                    is UiCommand.OpenAppSettings -> {
+                        Log.d("OnboardingBluetooth", "Opening App Settings")
+                        val intent = Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = android.net.Uri.fromParts("package", packageName, null)
+                        }
+                        startActivity(intent)
+                    }
                     is UiCommand.CreateMetaSession -> app.metaDatManager.createDeviceSession()
                     is UiCommand.CloseMetaSession -> app.metaDatManager.closeDeviceSession()
                     is UiCommand.ReconnectMetaSession -> app.metaDatManager.reconnectDeviceSession()
@@ -147,10 +191,19 @@ class MainActivity : ComponentActivity() {
                     is UiCommand.SelectPool -> {
                         app.serviceVisitCoordinator.onPoolSelected(command.pool)
                     }
-                    is UiCommand.CompleteOnboarding -> app.bridgeController.completeOnboarding()
+                    is UiCommand.CompleteOnboarding -> {
+                        app.bridgeController.completeOnboarding()
+                        startFieldMode()
+                    }
                     is UiCommand.ResetOnboarding -> app.bridgeController.resetOnboarding()
                     is UiCommand.NextOnboardingStep -> app.bridgeController.nextOnboardingStep()
                     is UiCommand.PreviousOnboardingStep -> app.bridgeController.previousOnboardingStep()
+                    is UiCommand.ConfirmTreatmentPlan -> app.serviceVisitCoordinator.confirmTreatmentPlan()
+                    is UiCommand.MarkServiceLogReady -> app.serviceVisitCoordinator.markServiceLogReady()
+                    is UiCommand.SubmitServiceCompletion -> app.serviceVisitCoordinator.submitServiceCompletion()
+                    is UiCommand.UpdateTechnicianNotes -> app.serviceVisitCoordinator.updateTechnicianNotes(command.notes)
+                    is UiCommand.StartManualVoiceTurn -> app.turnCoordinator.startManualTurn()
+                    is UiCommand.StopVoiceTurn -> app.turnCoordinator.cancelTurn()
                 }
             }
         }
@@ -159,8 +212,9 @@ class MainActivity : ComponentActivity() {
         turnTrigger.setListener { app.turnCoordinator.startWearableTurn() }
         turnTrigger.start()
 
-        // Sync route on startup
-        app.serviceVisitCoordinator.syncRoute()
+        if (app.bridgeController.uiState.value.isOnboardingCompleted) {
+            startFieldMode()
+        }
 
         // Sync coordinators with global state loop (already happening in components)
         
@@ -174,6 +228,18 @@ class MainActivity : ComponentActivity() {
                 AgentScreen(viewModel = viewModel, modifier = Modifier.fillMaxSize())
             }
         }
+    }
+
+    private fun startFieldMode() {
+        Log.i("HermesBridge", "Entering Field Mode: Syncing route and checking hardware...")
+        app.serviceVisitCoordinator.syncRoute()
+        // Try to initialize hardware session if registered
+        if (app.metaDatManager.status.value is MetaDatStatus.Ready || 
+            app.metaDatManager.status.value is MetaDatStatus.SessionReady) {
+            app.metaDatManager.createDeviceSession()
+        }
+        // Start foreground location detection for arrival logic
+        app.serviceVisitCoordinator.startLocationDetection()
     }
 
     private fun startWakeService() {
@@ -220,17 +286,22 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         refreshAllStatuses()
+        updatePermissionFlagsInController()
     }
 
     private fun refreshAllStatuses() {
-        app.metaDatManager.refreshStatus()
-        app.audioRouteManager.refreshRouteStatus()
-        val state = permissionManager.checkPermissionState()
-        val msg = when (state) {
-            is PermissionState.Ready -> "Meta Permissions: Ready"
-            is PermissionState.Missing -> "Meta Permissions: Required"
+        try {
+            app.metaDatManager.refreshStatus()
+            app.audioRouteManager.refreshRouteStatus()
+            val state = permissionManager.checkPermissionState()
+            val msg = when (state) {
+                is PermissionState.Ready -> "Meta Permissions: Ready"
+                is PermissionState.Missing -> "Meta Permissions: Required"
+            }
+            app.bridgeController.updatePermissionMessage(msg)
+        } catch (e: Throwable) {
+            Log.e("HermesBridge", "Failed to refresh statuses", e)
         }
-        app.bridgeController.updatePermissionMessage(msg)
     }
 
     override fun onStop() {

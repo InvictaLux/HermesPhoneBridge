@@ -10,6 +10,7 @@ sealed class WakeWordStatus {
     object Listening : WakeWordStatus()
     object Detected : WakeWordStatus()
     object Stopped : WakeWordStatus()
+    object NotConfigured : WakeWordStatus()
     data class Error(val message: String) : WakeWordStatus()
 
     fun getUserMessage(): String = when (this) {
@@ -22,6 +23,7 @@ sealed class WakeWordStatus {
         is Listening -> "Wake Word: Listening locally..."
         is Detected -> "Wake Word: DETECTED"
         is Stopped -> "Wake Word: Stopped"
+        is NotConfigured -> "Wake Word: Not Configured (API Key Missing)"
         is Error -> "Wake Word Error: $message"
     }
 }

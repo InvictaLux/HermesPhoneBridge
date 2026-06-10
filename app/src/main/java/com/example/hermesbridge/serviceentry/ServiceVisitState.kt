@@ -32,7 +32,13 @@ data class ServiceVisitState(
     val candidatePools: List<PoolRecord> = emptyList(),
     val isReadyForReadings: Boolean = false,
     val backendServiceStatus: String? = null,
-    val historicalContext: com.example.hermesbridge.HistoricalChemistryContext? = null
+    val historicalContext: com.example.hermesbridge.HistoricalChemistryContext? = null,
+    val treatmentPlanConfirmed: Boolean = false,
+    val serviceLogReady: Boolean = false,
+    val technicianNotes: String = "",
+    val completionLoading: Boolean = false,
+    val completionError: String? = null,
+    val completedAt: String? = null
 )
 
 data class ChemicalRecommendation(

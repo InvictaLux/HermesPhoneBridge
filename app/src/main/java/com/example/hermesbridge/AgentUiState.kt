@@ -74,5 +74,28 @@ data class AgentUiState(
     val isOnboardingCompleted: Boolean = false,
     val currentOnboardingStep: OnboardingStep = OnboardingStep.Welcome,
     val onboardingStepStatus: Map<OnboardingStep, StepStatus> = emptyMap(),
-    val serviceVisit: ServiceVisitState = ServiceVisitState()
+    val serviceVisit: ServiceVisitState = ServiceVisitState(),
+    
+    // Permission States (F12B-HOTFIX)
+    val isBluetoothPermissionGranted: Boolean = false,
+    val isMicrophonePermissionGranted: Boolean = false,
+    val isNotificationPermissionGranted: Boolean = false,
+    
+    // Visit Inspector (Gate F14A)
+    val visitInspectorResult: AgentResponse? = null,
+    val visitInspectorId: String = "",
+    val visitInspectorLoading: Boolean = false,
+    val visitInspectorError: String? = null,
+    
+    // Service History (Gate F14B/C/D)
+    val selectedHistoryDate: String = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date()),
+    val selectedHistoryPoolId: String? = null,
+    val historyResults: Map<String, List<ServiceHistoryRecord>> = emptyMap(), // poolId -> records
+    val historyLoading: Boolean = false,
+    val historyError: String? = null,
+
+    // Voice Session (Gate F15A)
+    val isWakeWordServiceAvailable: Boolean = false,
+    val isVoiceSessionActive: Boolean = false,
+    val voiceSessionPrompt: String? = null
 )

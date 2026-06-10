@@ -44,7 +44,13 @@ class BridgeController(
         val savedDeviceId = sharedPrefs.getString(AppConfig.KEY_DEVICE_ID, AppConfig.DEFAULT_DEVICE_ID) ?: AppConfig.DEFAULT_DEVICE_ID
         startNewSession(savedApiUrl, savedDeviceId)
         applyPersistedSettings()
+        checkWakeWordAvailability()
         startObserving()
+    }
+
+    private fun checkWakeWordAvailability() {
+        val available = wakeWordManager.isEngineAvailable()
+        _uiState.update { it.copy(isWakeWordServiceAvailable = available) }
     }
 
     private fun applyPersistedSettings() {
@@ -324,6 +330,20 @@ class BridgeController(
         _uiState.update { it.copy(inputText = text) }
     }
 
+    fun updatePermissionStates(
+        bluetooth: Boolean? = null,
+        microphone: Boolean? = null,
+        notifications: Boolean? = null
+    ) {
+        _uiState.update { state ->
+            state.copy(
+                isBluetoothPermissionGranted = bluetooth ?: state.isBluetoothPermissionGranted,
+                isMicrophonePermissionGranted = microphone ?: state.isMicrophonePermissionGranted,
+                isNotificationPermissionGranted = notifications ?: state.isNotificationPermissionGranted
+            )
+        }
+    }
+
     fun updateDiagnosticsExpanded(expanded: Boolean) {
         _uiState.update { it.copy(diagnosticsExpanded = expanded) }
     }
@@ -340,5 +360,98 @@ class BridgeController(
     fun updateWakeDebounce(ms: Long) {
         _uiState.update { it.copy(wakeDebounceMs = ms) }
         wakeWordManager.setDebounce(ms)
+    }
+
+    fun updateVisitInspectorId(id: String) {
+        _uiState.update { it.copy(visitInspectorId = id) }
+    }
+
+    fun updateTechnicianNotes(notes: String, coordinator: com.example.hermesbridge.serviceentry.ServiceVisitCoordinator) {
+        coordinator.updateTechnicianNotes(notes)
+    }
+
+    fun lookupServiceVisit(visitId: String, poolId: String? = null) {
+        if (visitId.isBlank()) return
+
+        _uiState.update { it.copy(visitInspectorLoading = true, visitInspectorError = null, visitInspectorResult = null) }
+
+        scope.launch {
+            val request = AgentRequest(
+                deviceId = _uiState.value.deviceId,
+                sessionId = _uiState.value.sessionId,
+                text = "service_visit_lookup",
+                timestamp = getIsoTimestamp(),
+                eventType = "service_visit_lookup",
+                visitId = visitId,
+                poolId = poolId ?: ""
+            )
+
+            val response = repository.sendMessage(_uiState.value.apiUrl, request)
+
+            if (response.error == null && response.status == "ok") {
+                _uiState.update { it.copy(
+                    visitInspectorLoading = false,
+                    visitInspectorResult = response
+                )}
+            } else {
+                _uiState.update { it.copy(
+                    visitInspectorLoading = false,
+                    visitInspectorError = response.error ?: "Failed to find visit record."
+                )}
+            }
+        }
+    }
+
+    fun updateHistoryDate(dateIso: String) {
+        _uiState.update { it.copy(selectedHistoryDate = dateIso) }
+    }
+
+    fun updateHistoryPoolId(poolId: String?) {
+        _uiState.update { it.copy(selectedHistoryPoolId = poolId) }
+    }
+
+    fun lookupPoolHistory(poolId: String, dateIso: String, offset: Int = 0) {
+        _uiState.update { it.copy(historyLoading = true, historyError = null) }
+
+        scope.launch {
+            val request = AgentRequest(
+                deviceId = _uiState.value.deviceId,
+                sessionId = _uiState.value.sessionId,
+                text = "pool_service_history_lookup",
+                timestamp = getIsoTimestamp(),
+                eventType = "pool_service_history_lookup",
+                poolId = poolId,
+                date = dateIso,
+                limit = 10,
+                offset = offset
+            )
+
+            val response = repository.sendMessage(_uiState.value.apiUrl, request)
+
+            if (response.error == null && response.status == "ok") {
+                _uiState.update { state ->
+                    val newHistory = state.historyResults.toMutableMap()
+                    val records = response.records ?: emptyList()
+                    
+                    // If offset is 0, replace. Otherwise append.
+                    if (offset == 0) {
+                        newHistory[poolId] = records
+                    } else {
+                        val existing = newHistory[poolId] ?: emptyList()
+                        newHistory[poolId] = existing + records
+                    }
+
+                    state.copy(
+                        historyLoading = false,
+                        historyResults = newHistory
+                    )
+                }
+            } else {
+                _uiState.update { it.copy(
+                    historyLoading = false,
+                    historyError = response.error ?: "Failed to load service history."
+                )}
+            }
+        }
     }
 }

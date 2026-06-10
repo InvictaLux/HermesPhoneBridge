@@ -35,6 +35,11 @@ class WakeWordTestManager(
     fun startTest() {
         if (_status.value is WakeWordStatus.Listening) return
 
+        if (engine is PorcupineWakeWordEngine && !engine.isAvailable()) {
+            _status.value = WakeWordStatus.NotConfigured
+            return
+        }
+
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             _status.value = WakeWordStatus.PermissionRequired
             return
@@ -134,6 +139,10 @@ class WakeWordTestManager(
     fun stopTest() {
         listeningJob?.cancel()
         listeningJob = null
+    }
+
+    fun isEngineAvailable(): Boolean {
+        return if (engine is PorcupineWakeWordEngine) engine.isAvailable() else true
     }
 
     fun release() {

@@ -82,26 +82,31 @@ class ConversationTurnCoordinator(
     }
 
     fun startWearableTurn() {
+        startTurn(isWearable = true)
+    }
+
+    fun startManualTurn() {
+        startTurn(isWearable = false)
+    }
+
+    private fun startTurn(isWearable: Boolean) {
         if (_turnState.value != ConversationTurnState.Idle && _turnState.value !is ConversationTurnState.Error && _turnState.value != ConversationTurnState.Completed) {
             Log.w("HermesTurn", "Turn already in progress: ${_turnState.value}")
             return
         }
 
-        if (metaDatManager.status.value !is MetaDatStatus.SessionReady) {
+        if (isWearable && metaDatManager.status.value !is MetaDatStatus.SessionReady) {
             endTurnWithError("Meta session not ready")
             return
         }
 
-        if (audioRouteManager.status.value !is BluetoothAudioRouteStatus.Routed) {
+        if (isWearable && audioRouteManager.status.value !is BluetoothAudioRouteStatus.Routed) {
             _turnState.value = ConversationTurnState.PreparingAudioRoute
             audioRouteManager.startBluetoothRoute()
         }
 
         if (mediaManager?.requestPauseBeforeTurn() == false) {
             Log.w("HermesTurn", "Media pause requested but failed or manual pause required.")
-            // Proceed anyway if it was just a policy warning, but for prototype we can show error
-            // endTurnWithError("Pause media before speaking")
-            // return
         }
 
         controller.stopSpeaking()
@@ -120,7 +125,15 @@ class ConversationTurnCoordinator(
         
         metricsCollector?.recordLatencyEvent { it.backendRequestStart = SystemClock.elapsedRealtime() }
         _turnState.value = ConversationTurnState.Sending
-        wearableInputSource.submitTranscript(text, confidence)
+        
+        // Use wearable source if a Bluetooth route is active
+        val source = if (audioRouteManager.isRoutingToBluetooth()) {
+            ConversationTurnSource.MetaWearableVoice
+        } else {
+            ConversationTurnSource.PhoneText // Or PhoneVoice if we add it
+        }
+        
+        controller.submitBridgeEvent(text, source)
     }
 
     private fun startSpeaking(text: String) {
@@ -146,6 +159,10 @@ class ConversationTurnCoordinator(
         speechToText.stopListening()
         controller.stopSpeaking()
         _turnState.value = ConversationTurnState.Canceled
+        
+        mediaManager?.handleTurnCompletion()
+        audioRouteManager.stopBluetoothRoute()
+
         scope.launch {
             kotlinx.coroutines.delay(1000)
             resetToIdle()
@@ -155,11 +172,15 @@ class ConversationTurnCoordinator(
     private fun endTurnWithError(msg: String) {
         Log.e("HermesTurn", "Turn error: $msg")
         _turnState.value = ConversationTurnState.Error(msg)
+        mediaManager?.handleTurnCompletion()
+        audioRouteManager.stopBluetoothRoute()
     }
 
     private fun endTurnWithCanceled(msg: String) {
         Log.w("HermesTurn", "Turn canceled: $msg")
         _turnState.value = ConversationTurnState.Canceled
+        mediaManager?.handleTurnCompletion()
+        audioRouteManager.stopBluetoothRoute()
         scope.launch {
             kotlinx.coroutines.delay(1000)
             resetToIdle()

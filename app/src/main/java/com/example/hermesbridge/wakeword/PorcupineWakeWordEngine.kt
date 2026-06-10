@@ -20,7 +20,13 @@ class PorcupineWakeWordEngine(
 
     private var startTime: Long = 0
 
+    fun isAvailable(): Boolean = accessKey.isNotBlank() && accessKey != "null"
+
     override fun start() {
+        if (!isAvailable()) {
+            Log.w("HermesWake", "Picovoice Access Key is missing or invalid. Wake word disabled.")
+            return
+        }
         try {
             if (porcupine == null) {
                 porcupine = Porcupine.Builder()

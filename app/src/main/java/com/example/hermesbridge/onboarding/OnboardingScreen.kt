@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -57,19 +58,28 @@ fun OnboardingScreen(
                             title = "Bluetooth Connection",
                             description = "Needed to discover and connect to your Ray-Ban Meta glasses.",
                             icon = Icons.Default.Bluetooth,
-                            onGrant = { viewModel.onGrantPermissionsClicked() }
+                            isGranted = state.isBluetoothPermissionGranted,
+                            onGrant = { viewModel.onGrantPermissionsClicked() },
+                            onOpenSettings = { viewModel.onOpenAppSettingsClicked() },
+                            onNext = { viewModel.onNextOnboardingStep() }
                         )
                         OnboardingStep.MicrophonePermission -> PermissionStep(
                             title = "Microphone Access",
                             description = "Used for voice commands and hands-free interaction. Audio is processed locally.",
                             icon = Icons.Default.Mic,
-                            onGrant = { viewModel.onGrantPermissionsClicked() }
+                            isGranted = state.isMicrophonePermissionGranted,
+                            onGrant = { viewModel.onGrantPermissionsClicked() },
+                            onOpenSettings = { viewModel.onOpenAppSettingsClicked() },
+                            onNext = { viewModel.onNextOnboardingStep() }
                         )
                         OnboardingStep.NotificationPermission -> PermissionStep(
                             title = "Notifications",
                             description = "Required to keep the hands-free assistant active while the app is in the background.",
                             icon = Icons.Default.Notifications,
-                            onGrant = { viewModel.onGrantPermissionsClicked() }
+                            isGranted = state.isNotificationPermissionGranted,
+                            onGrant = { viewModel.onGrantPermissionsClicked() },
+                            onOpenSettings = { viewModel.onOpenAppSettingsClicked() },
+                            onNext = { viewModel.onNextOnboardingStep() }
                         )
                         OnboardingStep.DeviceSession -> DeviceSessionStep(state, viewModel)
                         OnboardingStep.AudioRouteTest -> AudioRouteStep(state, viewModel)
@@ -170,15 +180,38 @@ fun MetaRegistrationStep(state: AgentUiState, viewModel: AgentViewModel) {
 }
 
 @Composable
-fun PermissionStep(title: String, description: String, icon: ImageVector, onGrant: () -> Unit) {
+fun PermissionStep(
+    title: String,
+    description: String,
+    icon: ImageVector,
+    isGranted: Boolean,
+    onGrant: () -> Unit,
+    onOpenSettings: () -> Unit,
+    onNext: () -> Unit
+) {
     StepLayout(title, description, icon) {
-        Button(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
-            Text("Grant Permission")
-        }
-        Spacer(modifier = Modifier.height(12.dp))
-        OutlinedButton(onClick = { /* Check status then next */ }, modifier = Modifier.fillMaxWidth()) {
-            // Simplified for prototype: user must grant or we block/skip manually
-            Text("Continue")
+        if (isGranted) {
+            Text(
+                "Permission granted!",
+                color = Color.Green,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(bottom = 16.dp)
+            )
+            Button(onClick = onNext, modifier = Modifier.fillMaxWidth()) {
+                Text("Continue")
+            }
+        } else {
+            Button(onClick = onGrant, modifier = Modifier.fillMaxWidth()) {
+                Text("Grant Permission")
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            OutlinedButton(onClick = onOpenSettings, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Settings")
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            TextButton(onClick = onNext) {
+                Text("Skip (Limited Mode)", color = Color.Gray)
+            }
         }
     }
 }
@@ -187,21 +220,35 @@ fun PermissionStep(title: String, description: String, icon: ImageVector, onGran
 fun DeviceSessionStep(state: AgentUiState, viewModel: AgentViewModel) {
     StepLayout(
         title = "Connect Glasses",
-        description = "Power on your glasses and ensure they are nearby.",
+        description = "Power on your glasses and ensure they are nearby. We'll search for them via Bluetooth.",
         icon = Icons.Default.BluetoothConnected
     ) {
-        ReadinessRow("Session", state.metaDatStatus.getUserMessage())
+        ReadinessRow("Status", state.metaDatStatus.getUserMessage())
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        if (state.metaDatStatus is MetaDatStatus.SessionReady) {
-            Button(onClick = { viewModel.onNextOnboardingStep() }, modifier = Modifier.fillMaxWidth()) {
+        val isReady = state.metaDatStatus is MetaDatStatus.SessionReady
+        
+        Button(
+            onClick = { viewModel.onCreateSessionClicked() },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = !isReady
+        ) {
+            Text(if (isReady) "Session Active" else "Start Device Session")
+        }
+
+        if (isReady) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Button(
+                onClick = { viewModel.onNextOnboardingStep() },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+            ) {
                 Text("Continue")
             }
-        } else {
-            Button(onClick = { viewModel.onCreateSessionClicked() }, modifier = Modifier.fillMaxWidth()) {
-                Text("Start Device Session")
-            }
+        } else if (state.metaDatStatus is MetaDatStatus.SearchingDevices || state.metaDatStatus is MetaDatStatus.DeviceFound) {
+            Spacer(modifier = Modifier.height(16.dp))
+            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
         }
     }
 }

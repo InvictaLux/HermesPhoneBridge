@@ -42,6 +42,7 @@ class BluetoothAudioRouteManager(private val context: Context) {
                 }
 
                 if (bluetoothDevice != null) {
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION // Set before setting communication device
                     val result = audioManager.setCommunicationDevice(bluetoothDevice)
                     if (result) {
                         isRoutingActive = true
@@ -52,6 +53,7 @@ class BluetoothAudioRouteManager(private val context: Context) {
                         )
                         Log.d("HermesAudio", "Communication device set: ${bluetoothDevice.productName}. Mode: ${audioManager.mode}")
                     } else {
+                        audioManager.mode = previousMode // Restore on failure
                         _status.value = BluetoothAudioRouteStatus.Error("Failed to set communication device")
                     }
                 } else {
@@ -68,6 +70,7 @@ class BluetoothAudioRouteManager(private val context: Context) {
             }
         } catch (e: Exception) {
             Log.e("HermesAudio", "Error starting audio route", e)
+            audioManager.mode = previousMode
             _status.value = BluetoothAudioRouteStatus.Error(e.message ?: "Unknown error")
         }
     }
@@ -84,11 +87,11 @@ class BluetoothAudioRouteManager(private val context: Context) {
             } else {
                 audioManager.stopBluetoothSco()
                 audioManager.isBluetoothScoOn = false
-                audioManager.mode = previousMode
             }
+            audioManager.mode = previousMode // Always restore mode
             isRoutingActive = false
             _status.value = BluetoothAudioRouteStatus.Stopped
-            Log.d("HermesAudio", "Audio route stopped and restored.")
+            Log.d("HermesAudio", "Audio route stopped and restored to mode: $previousMode.")
         } catch (e: Exception) {
             Log.e("HermesAudio", "Error stopping audio route", e)
             _status.value = BluetoothAudioRouteStatus.Error(e.message ?: "Unknown error")

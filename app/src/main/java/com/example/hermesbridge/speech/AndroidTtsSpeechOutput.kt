@@ -64,6 +64,12 @@ class AndroidTtsSpeechOutput(
         activeOnComplete = onComplete
         
         if (isInitialized && tts != null) {
+            val attributes = android.media.AudioAttributes.Builder()
+                .setUsage(android.media.AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+                .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build()
+            tts?.setAudioAttributes(attributes)
+
             val params = android.os.Bundle()
             params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "hermes_response")
             tts?.speak(text, TextToSpeech.QUEUE_FLUSH, params, "hermes_response")

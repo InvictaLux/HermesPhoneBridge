@@ -3,6 +3,7 @@ package com.example.hermesbridge
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -12,8 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Chat
-import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -98,14 +98,16 @@ fun AppShell(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showPlusMenu = true },
-                containerColor = AccentColor,
-                contentColor = Color.White,
-                shape = CircleShape,
-                modifier = Modifier.offset(y = 44.dp) // Align with bottom bar center
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Actions")
+            if (state.currentScreen == AppScreen.Home || state.currentScreen == AppScreen.Chat) {
+                FloatingActionButton(
+                    onClick = { showPlusMenu = true },
+                    containerColor = AccentColor,
+                    contentColor = Color.White,
+                    shape = CircleShape,
+                    modifier = Modifier.offset(y = 44.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "Actions")
+                }
             }
         },
         floatingActionButtonPosition = FabPosition.Center,
@@ -132,22 +134,14 @@ fun AppShell(
                 Crossfade(targetState = state.currentScreen, label = "ScreenTransition") { screen ->
                     when (screen) {
                         AppScreen.Home -> HomeScreen(state, viewModel)
-                        AppScreen.Customers -> PlaceholderScreen(
-                            title = "Customers List",
-                            description = "Future CRM integration here.",
-                            icon = Icons.Default.People
-                        )
-                        AppScreen.Route -> PlaceholderScreen(
-                            title = "Route Planner",
-                            description = "Future route and stop planning here.",
-                            icon = Icons.Default.Route
-                        )
+                        AppScreen.Customers -> CustomersScreen(state, viewModel)
                         AppScreen.Chat -> ChatScreen(
                             state = state,
                             viewModel = viewModel,
                             onPlusClick = { showPlusMenu = true }
                         )
-                        AppScreen.Library -> LibraryScreen()
+                        AppScreen.VisitInspector -> VisitInspectorScreen(state, viewModel)
+                        AppScreen.VisitCompletion -> VisitCompletionScreen(state, viewModel)
                     }
                 }
             }
@@ -237,9 +231,7 @@ fun BottomNavigationBar(
         
         Spacer(Modifier.weight(1f))
         
-        NavigationItem(AppScreen.Route, Icons.Default.Route, currentScreen, onScreenSelected)
         NavigationItem(AppScreen.Chat, Icons.AutoMirrored.Filled.Chat, currentScreen, onScreenSelected)
-        NavigationItem(AppScreen.Library, Icons.Default.LibraryBooks, currentScreen, onScreenSelected)
     }
 }
 
@@ -302,7 +294,7 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
         }
 
         if (state.serviceVisit.flowState != com.example.hermesbridge.serviceentry.ServiceFlowState.OffRoute) {
-            ServiceVisitCard(state.serviceVisit)
+            ServiceVisitCard(state.serviceVisit, viewModel)
         } else {
             LargeActionCard(
                 title = "Detect Current Pool",
@@ -311,6 +303,9 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
                 onClick = { viewModel.onDetectCurrentPoolClicked() }
             )
         }
+
+        // Voice Session Control (Gate F15A)
+        VoiceSessionControl(state, viewModel)
 
         if (state.serviceVisit.syncedPools.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
@@ -321,12 +316,307 @@ fun HomeScreen(state: AgentUiState, viewModel: AgentViewModel) {
             }
         }
 
-        Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
-            SectionHeader("Quick Actions")
-            QuickActionGrid()
-        }
-        
         Spacer(modifier = Modifier.height(SpacingMajor * 2))
+    }
+}
+
+@Composable
+fun CustomersScreen(state: AgentUiState, viewModel: AgentViewModel) {
+    val dateStrip = remember {
+        val list = mutableListOf<java.time.LocalDate>()
+        val start = java.time.LocalDate.now().minusDays(14)
+        for (i in 0..21) {
+            list.add(start.plusDays(i.toLong()))
+        }
+        list
+    }
+    val today = java.time.LocalDate.now()
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(SpacingStandard),
+        verticalArrangement = Arrangement.spacedBy(SpacingStandard)
+    ) {
+        Text("Service History", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
+
+        // Horizontal Date Selector
+        Row(
+            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            dateStrip.forEach { date ->
+                val dateIso = date.toString()
+                val isSelected = state.selectedHistoryDate == dateIso
+                val isToday = date == today
+                
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { viewModel.onHistoryDateSelected(dateIso) },
+                    label = { 
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (isToday) "Today" else date.dayOfWeek.name.take(3).lowercase().replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.labelSmall,
+                                fontSize = 10.sp
+                            )
+                            Text(
+                                text = "${date.monthValue}/${date.dayOfMonth}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = AccentColor,
+                        selectedLabelColor = Color.White,
+                        containerColor = CardBackground,
+                        labelColor = SecondaryText
+                    ),
+                    border = null
+                )
+            }
+        }
+
+        // Customer List (from Synced Route)
+        val pools = state.serviceVisit.syncedPools
+        
+        if (pools.isEmpty()) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.CloudOff, contentDescription = null, tint = CardBackground, modifier = Modifier.size(64.dp))
+                    Spacer(Modifier.height(16.dp))
+                    Text("No synced pools found.", color = SecondaryText)
+                    TextButton(onClick = { viewModel.onNavigateTo(AppScreen.Home) }) {
+                        Text("Go to Home to Sync Route", color = AccentColor)
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(SpacingCompact)
+            ) {
+                items(pools) { pool ->
+                    val isSelected = state.selectedHistoryPoolId == pool.poolId
+                    Card(
+                        modifier = Modifier.fillMaxWidth().clickable { 
+                            viewModel.onHistoryPoolSelected(if (isSelected) null else pool.poolId)
+                        },
+                        colors = CardDefaults.cardColors(containerColor = if (isSelected) AccentColor.copy(alpha = 0.05f) else CardBackground),
+                        shape = RoundedCornerShape(12.dp),
+                        border = if (isSelected) androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.5f)) else null
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Surface(
+                                    modifier = Modifier.size(24.dp),
+                                    shape = CircleShape,
+                                    color = if (isSelected) AccentColor else Color.DarkGray
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(pool.stopOrder.toString(), style = MaterialTheme.typography.labelSmall, color = Color.White, fontSize = 10.sp)
+                                    }
+                                }
+                                Spacer(Modifier.width(12.dp))
+                                Column {
+                                    Text(pool.customerName, fontWeight = FontWeight.Bold, color = if (isSelected) AccentColor else Color.White)
+                                    Text(pool.serviceAddress, style = MaterialTheme.typography.labelSmall, color = SecondaryText)
+                                }
+                            }
+                            
+                            if (isSelected) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp), color = Color.DarkGray)
+                                
+                                if (state.historyLoading && (state.historyResults[pool.poolId]?.isEmpty() != false)) {
+                                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                                    }
+                                } else if (state.historyError != null && (state.historyResults[pool.poolId]?.isEmpty() != false)) {
+                                    Text(state.historyError, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+                                } else {
+                                    val records = state.historyResults[pool.poolId] ?: emptyList()
+                                    if (records.isEmpty()) {
+                                        Text("No service records found for this pool on the selected date.", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                                    } else {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text("PAST RECORDS", style = MaterialTheme.typography.labelSmall, color = SecondaryText, fontWeight = FontWeight.Bold)
+                                            records.forEach { record ->
+                                                ServiceHistoryRecordItem(record) {
+                                                    viewModel.onHistoryRecordClicked(record)
+                                                }
+                                            }
+                                            
+                                            // Simple Load More
+                                            TextButton(
+                                                onClick = { viewModel.onLoadMoreHistory(pool.poolId) },
+                                                enabled = !state.historyLoading,
+                                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                                            ) {
+                                                if (state.historyLoading) {
+                                                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                                } else {
+                                                    Text("Load More", fontSize = 12.sp)
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ServiceHistoryRecordItem(record: ServiceHistoryRecord, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.3f)),
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color.DarkGray)
+    ) {
+        Column(modifier = Modifier.padding(SpacingStandard)) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(record.serviceDate, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+                Text(
+                    record.serviceStatus.uppercase(), 
+                    style = MaterialTheme.typography.labelSmall, 
+                    color = if (record.serviceStatus == "completed") Color.Green else AccentColor
+                )
+            }
+            
+            Spacer(Modifier.height(4.dp))
+            
+            // Readings Summary
+            record.readingsSummary?.let { r ->
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ReadingMiniTagSmall("CL", r["free_chlorine_ppm"])
+                    ReadingMiniTagSmall("PH", r["ph"])
+                    ReadingMiniTagSmall("TA", r["alkalinity_ppm"] ?: r["total_alkalinity_ppm"])
+                    ReadingMiniTagSmall("CH", r["calcium_hardness_ppm"])
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            
+            // Counts
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HistoryMetric("Recs", record.recommendationCount ?: 0)
+                HistoryMetric("Chems", record.chemicalApplicationCount ?: 0)
+                HistoryMetric("Vars", record.varianceCount ?: 0)
+            }
+
+            if (record.completedAt != null) {
+                Spacer(Modifier.height(4.dp))
+                Text("Completed: ${record.completedAt}", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+            }
+
+            if (!record.technicianNotes.isNullOrBlank()) {
+                Spacer(Modifier.height(8.dp))
+                Text("Notes: ${record.technicianNotes}", style = MaterialTheme.typography.bodySmall, color = Color.LightGray, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+fun ReadingMiniTagSmall(label: String, value: Float?) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, fontSize = 7.sp, color = SecondaryText)
+        Text(
+            text = value?.toString() ?: "--",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold,
+            color = Color.White
+        )
+    }
+}
+
+@Composable
+fun HistoryMetric(label: String, count: Int) {
+    Column {
+        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, fontSize = 7.sp, color = SecondaryText)
+        Text(count.toString(), style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+fun VoiceSessionControl(state: AgentUiState, viewModel: AgentViewModel) {
+    val turnState = state.turnState
+    val isActive = turnState !is ConversationTurnState.Idle
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = if (isActive) AccentColor.copy(alpha = 0.15f) else CardBackground),
+        shape = RoundedCornerShape(16.dp),
+        border = if (isActive) androidx.compose.foundation.BorderStroke(2.dp, AccentColor) else null
+    ) {
+        Column(modifier = Modifier.padding(SpacingStandard)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SpacingCompact)) {
+                    Icon(
+                        imageVector = if (isActive) Icons.Default.Mic else Icons.Default.MicNone,
+                        contentDescription = null,
+                        tint = if (isActive) Color.Green else AccentColor
+                    )
+                    Text(
+                        text = if (isActive) "Voice Session Active" else "Hands-Free Session",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                
+                Button(
+                    onClick = { 
+                        if (isActive) viewModel.onStopVoiceSessionClicked() 
+                        else viewModel.onStartVoiceSessionClicked() 
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isActive) Color.Red else AccentColor
+                    ),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(if (isActive) "Stop" else "Start Voice")
+                }
+            }
+            
+            if (isActive) {
+                Spacer(modifier = Modifier.height(SpacingCompact))
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth().height(2.dp).clip(CircleShape),
+                    color = Color.Green,
+                    trackColor = Color.Transparent
+                )
+                Spacer(modifier = Modifier.height(SpacingSmall))
+                Text(
+                    text = turnState.getUserMessage(),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(SpacingCompact))
+                Text(
+                    text = "Try saying: \"Sync my route\", \"Start service\", \"Enter readings\", or \"Complete visit\".",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SecondaryText
+                )
+            } else {
+                Spacer(modifier = Modifier.height(SpacingCompact))
+                Text(
+                    text = "Speak to the assistant to manage your route and service logs hands-free.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SecondaryText
+                )
+            }
+        }
     }
 }
 
@@ -405,7 +695,7 @@ fun SectionHeader(title: String) {
 @Composable
 fun QuickActionGrid() {
     Row(horizontalArrangement = Arrangement.spacedBy(SpacingSmall)) {
-        QuickActionItem("New Note", Icons.Default.NoteAdd, Modifier.weight(1f))
+        QuickActionItem("New Note", Icons.AutoMirrored.Filled.NoteAdd, Modifier.weight(1f))
         QuickActionItem("Log Service", Icons.Default.AssignmentTurnedIn, Modifier.weight(1f))
         QuickActionItem("Capture", Icons.Default.CameraAlt, Modifier.weight(1f))
     }
@@ -585,7 +875,7 @@ fun MessageBubble(
                     ) {
                         IconButton(onClick = { if (isSpeaking) onStopSpeaking() else onSpeak() }, modifier = Modifier.size(24.dp)) {
                             Icon(
-                                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.Default.VolumeUp,
+                                imageVector = if (isSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
                                 contentDescription = "Speak",
                                 modifier = Modifier.size(16.dp),
                                 tint = AccentColor
@@ -658,69 +948,6 @@ fun ChatComposer(
 }
 
 @Composable
-fun PlaceholderScreen(title: String, description: String, icon: ImageVector) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SpacingMajor),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            modifier = Modifier.size(64.dp),
-            tint = CardBackground
-        )
-        Spacer(modifier = Modifier.height(SpacingSection))
-        Text(title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
-        Spacer(modifier = Modifier.height(SpacingCompact))
-        Text(description, style = MaterialTheme.typography.bodyMedium, color = SecondaryText, textAlign = TextAlign.Center)
-        Spacer(modifier = Modifier.height(SpacingMajor))
-        Text("COMING SOON", style = MaterialTheme.typography.labelSmall, color = AccentColor, letterSpacing = 2.sp)
-    }
-}
-
-@Composable
-fun LibraryScreen() {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SpacingStandard),
-        verticalArrangement = Arrangement.spacedBy(SpacingStandard)
-    ) {
-        Text("Knowledge Library", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = Color.White)
-        
-        Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
-            LibraryCategory("Pool Chemistry", Icons.Default.Science)
-            LibraryCategory("Equipment Manuals", Icons.Default.Settings)
-            LibraryCategory("Procedures", Icons.Default.MenuBook)
-            LibraryCategory("Learning Path", Icons.Default.School)
-        }
-    }
-}
-
-@Composable
-fun LibraryCategory(label: String, icon: ImageVector) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = CardBackground),
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(SpacingStandard),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SpacingStandard)
-        ) {
-            Icon(icon, contentDescription = null, tint = AccentColor)
-            Text(label, style = MaterialTheme.typography.titleMedium, color = Color.White)
-            Spacer(Modifier.weight(1f))
-            Icon(Icons.Default.ChevronRight, contentDescription = null, tint = SecondaryText)
-        }
-    }
-}
-
-@Composable
 fun PlusActionMenu(onDismiss: () -> Unit) {
     Box(
         modifier = Modifier
@@ -737,9 +964,6 @@ fun PlusActionMenu(onDismiss: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(SpacingStandard)
         ) {
             PlusMenuItem("Ask Assistant", Icons.AutoMirrored.Filled.Chat, onDismiss)
-            PlusMenuItem("New Note", Icons.Default.NoteAdd, onDismiss)
-            PlusMenuItem("Log Service", Icons.Default.AssignmentTurnedIn, onDismiss)
-            PlusMenuItem("Capture Photo", Icons.Default.CameraAlt, onDismiss)
         }
     }
 }
@@ -898,11 +1122,14 @@ fun DiagnosticsPanel(
             }
         }
 
+        Text("SIMULATIONS", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = Color.Gray)
         Button(
             onClick = { viewModel.onTriggerLocationHandshake() },
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = Color.DarkGray)
         ) {
-            Text("Simulate McCullough GPS Arrival", fontSize = 10.sp)
+            Text("DEBUG: McCullough GPS Arrival", fontSize = 10.sp)
         }
         
         Button(
@@ -914,13 +1141,22 @@ fun DiagnosticsPanel(
         ) {
             Text("Test Wearable Voice Turn")
         }
+
+        Text("SYSTEM TOOLS", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        Button(
+            onClick = { viewModel.onNavigateTo(AppScreen.VisitInspector) },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Text("Open Visit Inspector", fontSize = 10.sp)
+        }
         
         Spacer(modifier = Modifier.height(SpacingStandard))
     }
 }
 
 @Composable
-fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState) {
+fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitState, viewModel: AgentViewModel) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = CardBackground),
@@ -928,6 +1164,7 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
         border = androidx.compose.foundation.BorderStroke(1.dp, AccentColor.copy(alpha = 0.3f))
     ) {
         Column(modifier = Modifier.padding(SpacingStandard)) {
+            // ... (Rest of existing header)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1003,6 +1240,55 @@ fun ServiceVisitCard(state: com.example.hermesbridge.serviceentry.ServiceVisitSt
                         modifier = Modifier.padding(top = 4.dp)
                     )
                 }
+
+                if (!state.treatmentPlanConfirmed) {
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    Button(
+                        onClick = { viewModel.onConfirmTreatmentPlanClicked() },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                    ) {
+                        Text("Confirm Treatment Plan", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(SpacingSmall))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                    ) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.Green, modifier = Modifier.size(16.dp))
+                        Text(
+                            text = "Treatment plan confirmed.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.Green,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    if (!state.serviceLogReady) {
+                        Spacer(modifier = Modifier.height(SpacingSmall))
+                        Button(
+                            onClick = { viewModel.onMarkServiceLogReadyClicked() },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AccentColor)
+                        ) {
+                            Text("Ready to Log Service", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    } else if (state.flowState != com.example.hermesbridge.serviceentry.ServiceFlowState.ServiceComplete) {
+                        Spacer(modifier = Modifier.height(SpacingSmall))
+                        Button(
+                            onClick = { viewModel.onNavigateTo(AppScreen.VisitCompletion) },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+                        ) {
+                            Text("Complete Visit", color = Color.White, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
     }
@@ -1054,6 +1340,250 @@ fun PoolSelectionMenu(
         titleContentColor = Color.White,
         textContentColor = Color.White
     )
+}
+
+@Composable
+fun VisitInspectorScreen(state: AgentUiState, viewModel: AgentViewModel) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(SpacingStandard)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(SpacingStandard)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Visit Inspector", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { viewModel.onNavigateTo(AppScreen.Home) }) {
+                Icon(Icons.Default.Close, contentDescription = "Close")
+            }
+        }
+
+        Text("Evidence-based backend record lookup.", style = MaterialTheme.typography.bodySmall, color = SecondaryText)
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardBackground),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Column(modifier = Modifier.padding(SpacingStandard), verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
+                OutlinedTextField(
+                    value = state.visitInspectorId,
+                    onValueChange = { viewModel.onVisitInspectorIdChanged(it) },
+                    label = { Text("Visit ID", color = Color.Gray) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+                Button(
+                    onClick = { viewModel.onLookupVisitClicked() },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = state.visitInspectorId.isNotBlank() && !state.visitInspectorLoading,
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    if (state.visitInspectorLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White)
+                    } else {
+                        Text("Lookup Record")
+                    }
+                }
+            }
+        }
+
+        if (state.visitInspectorError != null) {
+            Text(state.visitInspectorError, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+        }
+
+        state.visitInspectorResult?.let { result ->
+            InspectorSection("Visit Summary") {
+                result.serviceEvent?.let { ev ->
+                    ReadinessRow("Status", result.serviceStatus ?: "Unknown")
+                    ReadinessRow("Arrived", ev.arrivedAt ?: "--")
+                    ReadinessRow("Readings Saved", ev.readingsSavedAt ?: "--")
+                    ReadinessRow("Completed", ev.completedAt ?: "--")
+                    ReadinessRow("Plan Confirmed", ev.treatmentPlanConfirmed?.toString() ?: "No")
+                    ReadinessRow("Log Ready", ev.serviceLogReady?.toString() ?: "No")
+                    ev.technicianNotes?.let { 
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Notes: $it", style = MaterialTheme.typography.bodySmall)
+                    }
+                } ?: Text("No service event found", color = Color.Red)
+            }
+
+            InspectorSection("Readings") {
+                result.readings?.let { r ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        ReadingMiniTag("CL", r["free_chlorine_ppm"])
+                        ReadingMiniTag("PH", r["ph"])
+                        ReadingMiniTag("TA", r["alkalinity_ppm"] ?: r["total_alkalinity_ppm"])
+                        ReadingMiniTag("CH", r["calcium_hardness_ppm"])
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(top = 8.dp)) {
+                        ReadingMiniTag("CYA", r["cya_ppm"])
+                        ReadingMiniTag("SALT", r["salt_ppm"])
+                    }
+                } ?: Text("No readings found", color = SecondaryText)
+            }
+
+            InspectorSection("Recommendations") {
+                val recs = result.recommendations
+                if (recs.isNullOrEmpty()) {
+                    Text("No recommendations found", color = SecondaryText)
+                } else {
+                    recs.forEach { rec ->
+                        Text("• ${rec.amount} ${rec.unit} ${rec.name ?: rec.productId}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            InspectorSection("Actual Chemicals Added") {
+                val apps = result.chemicalApplications
+                if (apps.isNullOrEmpty()) {
+                    Text("No chemicals logged", color = SecondaryText)
+                } else {
+                    apps.forEach { app ->
+                        Text("• ${app.amount} ${app.unit} ${app.productId}", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            InspectorSection("Recommendation Variance") {
+                val variance = result.recommendationVariance
+                if (variance.isNullOrEmpty()) {
+                    Text("No variance rows found", color = SecondaryText)
+                } else {
+                    variance.forEach { v ->
+                        Text("• ${v.productId}: Rec ${v.recommended} / Act ${v.actual} (Var ${v.variance})", style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+
+            InspectorSection("Health Check") {
+                val missing = result.missingSections
+                if (missing.isNullOrEmpty()) {
+                    Text("Record complete", color = Color.Green, style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Text("Missing: ${missing.joinToString(", ")}", color = Color.Yellow, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun VisitCompletionScreen(state: AgentUiState, viewModel: AgentViewModel) {
+    val visit = state.serviceVisit
+    
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(SpacingStandard)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(SpacingStandard)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Complete Visit", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            IconButton(onClick = { viewModel.onNavigateTo(AppScreen.Home) }) {
+                Icon(Icons.Default.Close, contentDescription = "Close")
+            }
+        }
+
+        if (visit.flowState == com.example.hermesbridge.serviceentry.ServiceFlowState.ServiceComplete) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1B5E20)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(SpacingStandard), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("Visit Completed", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color.White)
+                    Text("Time: ${visit.completedAt ?: "Just now"}", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
+                }
+            }
+        }
+
+        InspectorSection("Visit Summary") {
+            ReadinessRow("Customer", visit.activePool?.customerName ?: "--")
+            ReadinessRow("Pool ID", visit.activePool?.poolId ?: "--")
+            ReadinessRow("Visit ID", visit.visitId ?: "--")
+            ReadinessRow("Readings", if (visit.isReadyForReadings) "Captured" else "Missing")
+            ReadinessRow("Recommendations", if (visit.recommendations.isNotEmpty()) "Available" else "None")
+            ReadinessRow("Plan Confirmed", if (visit.treatmentPlanConfirmed) "Yes" else "No")
+            ReadinessRow("Log Ready", if (visit.serviceLogReady) "Yes" else "No")
+        }
+
+        if (visit.flowState != com.example.hermesbridge.serviceentry.ServiceFlowState.ServiceComplete) {
+            InspectorSection("Final Notes") {
+                OutlinedTextField(
+                    value = visit.technicianNotes,
+                    onValueChange = { viewModel.onTechnicianNotesChanged(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("Enter any service notes...", color = Color.Gray) },
+                    minLines = 3,
+                    textStyle = MaterialTheme.typography.bodyMedium
+                )
+            }
+
+            if (visit.completionError != null) {
+                Text(visit.completionError, color = Color.Red, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Button(
+                onClick = { viewModel.onSubmitServiceCompletionClicked() },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50)),
+                enabled = !visit.completionLoading && visit.visitId != null
+            ) {
+                if (visit.completionLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = Color.White)
+                } else {
+                    Text("Confirm and Finish", fontWeight = FontWeight.Bold)
+                }
+            }
+        } else {
+            if (visit.technicianNotes.isNotBlank()) {
+                InspectorSection("Technician Notes") {
+                    Text(visit.technicianNotes, style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun InspectorSection(title: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(SpacingCompact)) {
+        SectionHeader(title)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = CardBackground),
+            shape = RoundedCornerShape(8.dp)
+        ) {
+            Column(modifier = Modifier.padding(SpacingStandard)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun ReadinessRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+        Text(value, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color.White)
+    }
 }
 
 @Preview(showBackground = true)
